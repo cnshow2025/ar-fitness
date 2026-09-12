@@ -112,6 +112,7 @@ export function mountDance(root: HTMLElement, level: Level, settings: Settings, 
   let calDir = 0;
   let calQuick = false;
   let calCenter: Pt | null = null;
+  let calRest: { L: Pt; R: Pt } | null = null;
   let calLegLen = 0;
   let calAnchors: Partial<Record<'front' | 'back' | 'left' | 'right', Pt>> = {};
   let calHist: Array<{ t: number; L: Pt; R: Pt; mid: Pt }> = [];
@@ -242,6 +243,7 @@ export function mountDance(root: HTMLElement, level: Level, settings: Settings, 
       hint.textContent = stable ? '' : `站在中央保持不動… ${Math.max(0, 1.5 - stableFor).toFixed(1)} 秒`;
       if (!stable) return;
       calCenter = avgOver((h) => h.mid, now, 1500);
+      calRest = { L: avgOver((h) => h.L, now, 1500), R: avgOver((h) => h.R, now, 1500) };
       calLegLen = legLen;
       provisional = new FloorGrid({ ...cal, cx: calCenter.x, cy: calCenter.y });
       if (calQuick) {
@@ -257,15 +259,18 @@ export function mountDance(root: HTMLElement, level: Level, settings: Settings, 
       return;
     }
 
-    if (!calCenter) return;
+    if (!calCenter || !calRest) return;
     const dir = CALIB_DIRS[calDir];
     if (calStage === 'step') {
+      // 量每隻腳離「自己站中央時的位置」移動多少（前後踩在畫面上位移很小，門檻要低）
       const last = calHist[calHist.length - 1];
-      const dL = Math.hypot(last.L.x - calCenter.x, last.L.y - calCenter.y);
-      const dR = Math.hypot(last.R.x - calCenter.x, last.R.y - calCenter.y);
+      const dL = Math.hypot(last.L.x - calRest.L.x, last.L.y - calRest.L.y);
+      const dR = Math.hypot(last.R.x - calRest.R.x, last.R.y - calRest.R.y);
       const useL = dL >= dR;
       const get = (h: { L: Pt; R: Pt }) => (useL ? h.L : h.R);
-      const moved = Math.max(dL, dR) > calLegLen * 0.2;
+      const disp = Math.max(dL, dR) / calLegLen;
+      calStatus.textContent = `校正 ${calDir}/4 · 移動 ${Math.round(disp * 100)}%`;
+      const moved = disp > 0.1;
       if (!moved) {
         if (now - calStageAt > 4000) {
           hint.className = 'cue warn';
