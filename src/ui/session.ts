@@ -26,7 +26,7 @@ export function mountSession(root: HTMLElement, program: Program, settings: Sett
 
   // ───── DOM ─────
   const video = el('video', { class: settings.facing === 'user' ? 'mirrored' : '' });
-  const canvas = el('canvas', { class: settings.facing === 'user' ? 'mirrored' : '' });
+  const canvas = el('canvas');
   const titleName = el('b');
   const titleSub = el('span');
   const counter = el('div', { class: 'counter' });
@@ -104,7 +104,6 @@ export function mountSession(root: HTMLElement, program: Program, settings: Sett
     try {
       await camera.flip();
       video.classList.toggle('mirrored', camera.mirrored);
-      canvas.classList.toggle('mirrored', camera.mirrored);
       detector.reset();
     } catch (err) {
       showCue(`切換鏡頭失敗：${(err as Error).message}`, 'danger', false);
@@ -415,7 +414,6 @@ export function mountSession(root: HTMLElement, program: Program, settings: Sett
     try {
       await camera.start(settings.facing);
       video.classList.toggle('mirrored', camera.mirrored);
-      canvas.classList.toggle('mirrored', camera.mirrored);
       if (!detector.ready) await detector.load((msg) => showLoading(msg));
       if (disposed) return;
       cancelAnimationFrame(rafId);

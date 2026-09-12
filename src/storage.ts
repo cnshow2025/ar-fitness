@@ -24,10 +24,24 @@ export interface Settings {
   voice: boolean;
   facing: 'user' | 'environment';
   showAngles: boolean;
+  /** 跳舞判定的延遲補償（毫秒），補償相機與姿勢偵測的延遲 */
+  danceOffsetMs: number;
+  /** 跳舞時語音報格 */
+  danceVoice: boolean;
+}
+
+export interface DanceRecord {
+  levelId: number;
+  score: number;
+  accuracy: number;
+  stars: number;
+  maxCombo: number;
+  date: string;
 }
 
 const HISTORY_KEY = 'arfit.history.v1';
 const SETTINGS_KEY = 'arfit.settings.v1';
+const DANCE_KEY = 'arfit.dance.v1';
 
 function read<T>(key: string, fallback: T): T {
   try {
@@ -61,9 +75,30 @@ export function clearHistory(): void {
 }
 
 export function loadSettings(): Settings {
-  return { voice: true, facing: 'user', showAngles: true, ...read<Partial<Settings>>(SETTINGS_KEY, {}) };
+  return {
+    voice: true,
+    facing: 'user',
+    showAngles: true,
+    danceOffsetMs: 100,
+    danceVoice: true,
+    ...read<Partial<Settings>>(SETTINGS_KEY, {}),
+  };
 }
 
 export function saveSettings(s: Settings): void {
   write(SETTINGS_KEY, s);
+}
+
+export function loadDanceRecords(): Record<number, DanceRecord> {
+  return read<Record<number, DanceRecord>>(DANCE_KEY, {});
+}
+
+/** 只保留每關最高分。回傳是否刷新紀錄。 */
+export function saveDanceRecord(rec: DanceRecord): boolean {
+  const all = loadDanceRecords();
+  const prev = all[rec.levelId];
+  if (prev && prev.score >= rec.score) return false;
+  all[rec.levelId] = rec;
+  write(DANCE_KEY, all);
+  return true;
 }

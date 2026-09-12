@@ -79,6 +79,8 @@ button {
   border-radius: 999px;
   color: var(--muted);
   font-weight: 600;
+  font-size: 14px;
+  white-space: nowrap;
 }
 .tabs button.active {
   background: var(--accent);
@@ -460,4 +462,180 @@ table.summary td.num {
   border-radius: var(--radius);
   padding: 14px;
   margin: 12px 0;
+}
+
+/* ───────── 跳舞九宮格 ───────── */
+.dance .combo {
+  font-size: 13px;
+  color: var(--warn);
+  text-align: right;
+  min-height: 16px;
+  font-weight: 700;
+}
+.beat-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: middle;
+  opacity: 0.4;
+}
+.beat-dot.pulse {
+  animation: beat 0.25s ease-out;
+}
+@keyframes beat {
+  0% {
+    transform: scale(2.2);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0.4;
+  }
+}
+.dance-lane {
+  position: absolute;
+  top: calc(var(--safe-top) + 64px);
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 12px;
+  pointer-events: none;
+}
+.lane-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--muted);
+  opacity: 0.7;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+.lane-item.first {
+  opacity: 1;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+}
+.lane-item.first .mini-grid {
+  transform: scale(1.25);
+  margin-bottom: 4px;
+}
+.mini-grid {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2px;
+  background: rgba(0, 0, 0, 0.45);
+  padding: 3px;
+  border-radius: 6px;
+}
+.mini-grid i {
+  display: block;
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: 2px;
+}
+.mini-grid.gesture {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-style: normal;
+}
+.gesture-banner {
+  position: absolute;
+  top: 34%;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+  font-size: 22px;
+  font-weight: 800;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.8);
+}
+.gesture-banner .ring {
+  width: 110px;
+  height: 110px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 54px;
+  background: conic-gradient(var(--good) calc(var(--p) * 360deg), rgba(255, 255, 255, 0.15) 0);
+  padding: 6px;
+}
+.gesture-banner .ring span {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: rgba(11, 16, 32, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.judge-pop {
+  position: absolute;
+  top: 46%;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 40px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  opacity: 0;
+  transform: scale(0.7);
+  pointer-events: none;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.9);
+}
+.judge-pop.show {
+  animation: pop 0.45s ease-out forwards;
+}
+.judge-pop.perfect {
+  color: var(--good);
+}
+.judge-pop.good {
+  color: var(--warn);
+}
+.judge-pop.miss {
+  color: var(--danger);
+}
+@keyframes pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  20% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+.cue.big {
+  font-size: 72px;
+  line-height: 1;
+  color: var(--accent);
+}
+.stars {
+  font-size: 44px;
+  color: var(--warn);
+  letter-spacing: 6px;
+  margin: 4px 0 8px;
+}
+.ready-panel p {
+  line-height: 1.7;
 }

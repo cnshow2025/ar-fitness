@@ -1,12 +1,15 @@
 import { CATEGORY_LABEL, EXERCISES } from '../exercises/definitions';
 import { estimateDuration, PROGRAMS, singleExerciseProgram, type Program } from '../programs/definitions';
-import { clearHistory, loadHistory, saveSettings, type Settings } from '../storage';
+import { clearHistory, loadDanceRecords, loadHistory, saveSettings, type Settings } from '../storage';
+import { LEVELS } from '../dance/chart';
+import type { Level } from '../dance/types';
 import { el, formatDuration } from './dom';
 
-type Tab = 'programs' | 'exercises' | 'history' | 'settings';
+type Tab = 'programs' | 'exercises' | 'dance' | 'history' | 'settings';
 
 export interface HomeHandlers {
   onStart(program: Program): void;
+  onDance(level: Level): void;
 }
 
 let currentTab: Tab = 'programs';
@@ -25,6 +28,7 @@ export function renderHome(root: HTMLElement, settings: Settings, handlers: Home
   const tabDefs: Array<[Tab, string]> = [
     ['programs', '課程'],
     ['exercises', '單項動作'],
+    ['dance', '跳舞'],
     ['history', '紀錄'],
     ['settings', '設定'],
   ];
@@ -35,6 +39,7 @@ export function renderHome(root: HTMLElement, settings: Settings, handlers: Home
     content.innerHTML = '';
     if (tab === 'programs') content.append(programsTab(handlers));
     if (tab === 'exercises') content.append(exercisesTab(handlers));
+    if (tab === 'dance') content.append(danceTab(handlers));
     if (tab === 'history') content.append(historyTab(() => renderTab('history')));
     if (tab === 'settings') content.append(settingsTab(settings));
   };
@@ -88,6 +93,42 @@ function exercisesTab(handlers: HomeHandlers): HTMLElement {
         ]),
       );
     }
+  }
+  return wrap;
+}
+
+function danceTab(handlers: HomeHandlers): HTMLElement {
+  const wrap = el('div');
+  const records = loadDanceRecords();
+  wrap.append(
+    el('p', { class: 'note' }, [
+      '跳舞九宮格：地板上會出現 3×3 格子，跟著節拍把腳踩進亮起的格子，看到手勢圖示就做動作。需要全身入鏡，建議把手機放在腰部高度、距離 2 到 2.5 公尺。',
+    ]),
+  );
+  for (const lv of LEVELS) {
+    const rec = records[lv.id];
+    const stars = rec ? '★'.repeat(rec.stars) + '☆'.repeat(3 - rec.stars) : '☆☆☆';
+    wrap.append(
+      el('button', { class: 'card', onClick: () => handlers.onDance(lv) }, [
+        el('h3', {}, [`第 ${lv.id} 關　${lv.name}`, el('span', { class: 'chip warn', style: 'letter-spacing:2px' }, [stars])]),
+        el('p', {}, [
+          [
+            `${lv.bpm} BPM`,
+            `${lv.bars} 小節`,
+            lv.density === 1 ? '每 2 拍一步' : lv.density === 2 ? '每拍一步' : '含半拍',
+            lv.diagonals ? '含斜角' : '只有前後左右',
+            lv.gestureProb > 0 ? '含手勢' : '',
+            lv.jumpProb > 0 ? '含雙腳跳' : '',
+          ]
+            .filter(Boolean)
+            .join(' · '),
+        ]),
+        el('div', { class: 'meta' }, [
+          rec ? el('span', { class: 'chip accent' }, [`最高 ${rec.score} 分 · ${Math.round(rec.accuracy * 100)}%`]) : el('span', { class: 'chip' }, ['尚未挑戰']),
+          rec ? el('span', { class: 'chip' }, [`最高連擊 ${rec.maxCombo}`]) : null,
+        ]),
+      ]),
+    );
   }
   return wrap;
 }
@@ -162,6 +203,30 @@ function settingsTab(settings: Settings): HTMLElement {
       () => settings.facing === 'user',
       (v) => (settings.facing = v ? 'user' : 'environment'),
     ),
+  );
+  wrap.append(
+    toggleRow(
+      '跳舞語音報格',
+      '跳舞時提前一拍念出下一步（BPM 太快時自動關閉）',
+      () => settings.danceVoice,
+      (v) => (settings.danceVoice = v),
+    ),
+  );
+  const offsetVal = el('b', {}, [`${settings.danceOffsetMs} ms`]);
+  const step = (d: number) => {
+    settings.danceOffsetMs = Math.max(-200, Math.min(400, settings.danceOffsetMs + d));
+    offsetVal.textContent = `${settings.danceOffsetMs} ms`;
+    saveSettings(settings);
+  };
+  wrap.append(
+    el('div', { class: 'setting' }, [
+      el('div', {}, [el('div', {}, ['跳舞判定延遲補償']), el('div', { class: 'note' }, ['覺得明明踩準卻總是判「晚了」就調大，總是判「早了」就調小'])]),
+      el('div', { class: 'row' }, [
+        el('button', { class: 'btn secondary small', onClick: () => step(-20) }, ['−']),
+        offsetVal,
+        el('button', { class: 'btn secondary small', onClick: () => step(20) }, ['+']),
+      ]),
+    ]),
   );
   wrap.append(
     el('div', { class: 'section-title' }, ['關於']),

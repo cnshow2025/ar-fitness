@@ -3,6 +3,8 @@ import type { Program } from './programs/definitions';
 import { loadSettings, saveSession, type SessionResult } from './storage';
 import { renderHome } from './ui/home';
 import { mountSession } from './ui/session';
+import { mountDance } from './ui/dance';
+import type { Level } from './dance/types';
 import { renderSummary } from './ui/summary';
 
 const root = document.getElementById('app')!;
@@ -13,7 +15,15 @@ function goHome(): void {
   teardown?.();
   teardown = null;
   window.scrollTo(0, 0);
-  renderHome(root, settings, { onStart: startProgram });
+  renderHome(root, settings, { onStart: startProgram, onDance: startDance });
+}
+
+function startDance(level: Level): void {
+  teardown?.();
+  teardown = mountDance(root, level, settings, {
+    onExit: goHome,
+    onPlay: (next) => startDance(next),
+  });
 }
 
 function startProgram(program: Program): void {
