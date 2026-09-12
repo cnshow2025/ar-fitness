@@ -232,6 +232,14 @@ function settingsTab(settings: Settings): HTMLElement {
       (v) => (settings.danceFloorMode = v ? 'pad' : 'ar'),
     ),
   );
+  wrap.append(
+    toggleRow(
+      '跳舞墊上排＝往後退',
+      '開：像照鏡子，畫面上腳往上移就是往後退（預設）。關：像跳舞機，上排＝往手機走',
+      () => settings.danceUpIsBack,
+      (v) => (settings.danceUpIsBack = v),
+    ),
+  );
   const cellVal = el('b', {}, [`${Math.round(settings.danceCellScale * 100)}%`]);
   const stepCell = (d: number) => {
     settings.danceCellScale = Math.round(Math.max(0.6, Math.min(1.6, settings.danceCellScale + d)) * 10) / 10;

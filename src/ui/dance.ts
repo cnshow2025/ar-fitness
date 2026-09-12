@@ -50,14 +50,13 @@ export function mountDance(root: HTMLElement, level: Level, settings: Settings, 
   const beatLights = Array.from({ length: 4 }, () => el('span', { class: 'beat-light' }));
   const previewCells = Array.from({ length: 9 }, () => el('div', { class: 'pv-cell' }));
   const previewGesture = el('div', { class: 'pv-gesture' });
-  // 平面預告格用「俯視、玩家面向手機」的方向：上排＝靠近手機（前）、下排＝遠離手機（後）。
-  // 資料的 row 0 是後排，所以顯示時上下翻轉。
-  const previewOrder = [6, 7, 8, 3, 4, 5, 0, 1, 2].map((i) => previewCells[i]);
+  // 平面預告格的上下方向跟腳邊墊子一致：upIsBack＝上排是後（像照鏡子），否則上排是前（像跳舞機）
+  const previewOrder = (settings.danceUpIsBack ? [0, 1, 2, 3, 4, 5, 6, 7, 8] : [6, 7, 8, 3, 4, 5, 0, 1, 2]).map((i) => previewCells[i]);
   const preview = el('div', { class: 'preview-grid', hidden: true }, [
     previewGesture,
-    el('div', { class: 'pv-marker' }, ['📱 手機這邊（前）']),
+    el('div', { class: 'pv-marker' }, [settings.danceUpIsBack ? '後（往後退）' : '📱 手機這邊（前）']),
     el('div', { class: 'pv-grid' }, previewOrder),
-    el('div', { class: 'pv-marker' }, ['後']),
+    el('div', { class: 'pv-marker' }, [settings.danceUpIsBack ? '📱 手機這邊（前）' : '後（往後退）']),
   ]);
   const lane = el('div', { class: 'dance-lane' });
   const gestureBanner = el('div', { class: 'gesture-banner', hidden: true });
@@ -205,7 +204,11 @@ export function mountDance(root: HTMLElement, level: Level, settings: Settings, 
     setPanel(
       el('div', { class: 'ready-panel' }, [
         el('h2', {}, ['九宮格已就位']),
-        el('p', {}, [settings.danceFloorMode === 'pad' ? '腳邊的跳舞墊：上排＝靠近手機、下排＝遠離手機，亮起的格子就是要踩的位置。' : '亮起的格子就是要踩的位置。', el('br'), el('b', { style: `color:${FOOT_COLOR.L}` }, ['藍色 = 左腳']), '　', el('b', { style: `color:${FOOT_COLOR.R}` }, ['橘色 = 右腳']), '　', el('b', { style: `color:${FOOT_COLOR.both}` }, ['綠色 = 雙腳跳']), el('br'), '外框縮到貼齊格子的那一刻踩下去最準。', el('br'), '看到 🙌 👏 ↔️ 就做出對應手勢。']),
+        el('p', {}, [settings.danceFloorMode === 'pad'
+            ? settings.danceUpIsBack
+              ? '腳邊的跳舞墊像照鏡子：上排＝往後退、下排＝往手機走，亮起的格子就是要踩的位置。'
+              : '腳邊的跳舞墊：上排＝往手機走、下排＝往後退，亮起的格子就是要踩的位置。'
+            : '亮起的格子就是要踩的位置。', el('br'), el('b', { style: `color:${FOOT_COLOR.L}` }, ['藍色 = 左腳']), '　', el('b', { style: `color:${FOOT_COLOR.R}` }, ['橘色 = 右腳']), '　', el('b', { style: `color:${FOOT_COLOR.both}` }, ['綠色 = 雙腳跳']), el('br'), '外框縮到貼齊格子的那一刻踩下去最準。', el('br'), '看到 🙌 👏 ↔️ 就做出對應手勢。']),
         el('div', { class: 'actions' }, [
           startBtn,
           el('button', { class: 'btn secondary block', onClick: () => startCalibrate() }, ['重新校正']),
@@ -456,6 +459,7 @@ export function mountDance(root: HTMLElement, level: Level, settings: Settings, 
       showLabels: phase !== 'playing',
       beatPulse,
       mode: settings.danceFloorMode,
+      upIsBack: settings.danceUpIsBack,
     });
     if (phase === 'ready' || phase === 'result') drawHoldRing(canvas, control.state, camera.mirrored);
   }

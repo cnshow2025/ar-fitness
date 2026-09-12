@@ -25,8 +25,10 @@ export interface DanceOverlayOptions {
   showLabels: boolean;
   /** 0..1，剛打到拍點時為 1，之後衰減；用來讓格線隨節拍閃動 */
   beatPulse: number;
-  /** pad＝俯視跳舞墊（上排＝靠近手機），ar＝貼地透視格 */
+  /** pad＝俯視跳舞墊，ar＝貼地透視格 */
   mode: 'pad' | 'ar';
+  /** 跳舞墊上排代表往後退（像照鏡子）；false 則上排代表往手機走 */
+  upIsBack: boolean;
 }
 
 export const FOOT_COLOR: Record<Foot | 'both', string> = {
@@ -210,12 +212,14 @@ export class DanceOverlay {
     const padCx = Math.min(w - padW / 2 - pad, Math.max(padW / 2 + pad, opts.grid.cal.cx));
     const padCy = Math.min(h - padW / 2 - 40 * scale, Math.max(padW / 2 + 60 * scale, opts.grid.cal.cy));
     const padTop = padCy - padW / 2;
-    // 資料格 → 影像座標矩形（col 0 = 玩家左 = 影像 x 較大；row 2 = 前 = 上排）
+    // 資料格 → 影像座標矩形（col 0 = 玩家左 = 影像 x 較大）
+    // upIsBack：row 0（後）在上排，跟鏡像影像一致；否則 row 2（前）在上排
+    const padRow = (row: number) => (opts.upIsBack ? row : 2 - row);
     const rectOf = (c: number) => {
       const col = cellCol(c);
       const row = cellRow(c);
       const x0 = padCx + (1 - col) * cell - cell / 2;
-      const y0 = padTop + (2 - row) * cell;
+      const y0 = padTop + padRow(row) * cell;
       const sx = Math.min(mx(x0), mx(x0 + cell));
       return { x: sx, y: y0, w: cell, h: cell };
     };
@@ -301,11 +305,13 @@ export class DanceOverlay {
     ctx.textAlign = 'center';
     ctx.lineWidth = 3 * scale;
     ctx.strokeStyle = 'rgba(0,0,0,0.8)';
-    ctx.strokeText('📱 手機這邊（前）', centerSx, padTop - 14 * scale);
+    const topText = opts.upIsBack ? '後（往後退）' : '📱 手機這邊（前）';
+    const bottomText = opts.upIsBack ? '📱 手機這邊（前）' : '後（往後退）';
+    ctx.strokeText(topText, centerSx, padTop - 14 * scale);
     ctx.fillStyle = '#fff';
-    ctx.fillText('📱 手機這邊（前）', centerSx, padTop - 14 * scale);
-    ctx.strokeText('後', centerSx, padTop + padW + 22 * scale);
-    ctx.fillText('後', centerSx, padTop + padW + 22 * scale);
+    ctx.fillText(topText, centerSx, padTop - 14 * scale);
+    ctx.strokeText(bottomText, centerSx, padTop + padW + 22 * scale);
+    ctx.fillText(bottomText, centerSx, padTop + padW + 22 * scale);
 
     if (!pose) return;
     // 雙腳：畫在墊子上的對應位置
@@ -314,7 +320,7 @@ export class DanceOverlay {
       if (p.visibility < 0.4) continue;
       const { colCont, rowCont } = opts.grid.continuous(p);
       const ix = padCx + (1.5 - colCont) * cell;
-      const y = padTop + (3 - rowCont) * cell;
+      const y = padTop + (opts.upIsBack ? rowCont : 3 - rowCont) * cell;
       const x = mx(ix);
       ctx.fillStyle = FOOT_COLOR[foot];
       ctx.beginPath();

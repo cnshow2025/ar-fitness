@@ -36,6 +36,8 @@ export interface Settings {
   danceFloorMode: 'pad' | 'ar';
   /** 跳舞格子大小倍率（1 = 預設） */
   danceCellScale: number;
+  /** 上排代表往後退（像照鏡子，預設）；false 則上排代表往手機走（像跳舞機） */
+  danceUpIsBack: boolean;
 }
 
 export interface DanceRecord {
@@ -93,6 +95,7 @@ export function loadSettings(): Settings {
     gestureControl: true,
     danceFloorMode: 'pad',
     danceCellScale: 1,
+    danceUpIsBack: true,
     ...read<Partial<Settings>>(SETTINGS_KEY, {}),
   };
 }
