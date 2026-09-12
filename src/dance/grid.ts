@@ -52,11 +52,26 @@ export function averageCalibrations(list: GridCalibration[]): GridCalibration {
 
 export type Poly = Array<{ x: number; y: number }>;
 
+/** 九宮格模型共同介面：參數式（FloorGrid）與實測式（MeasuredGrid）都實作它。 */
+export interface DanceGrid {
+  /** 某個影像點落在哪一格；離九宮格太遠回傳 null。 */
+  cellOf(p: { x: number; y: number }): number | null;
+  /** 連續格子座標（1.5, 1.5 = 中央格中心） */
+  continuous(p: { x: number; y: number }): { colCont: number; rowCont: number };
+  polygon(cell: number): Poly;
+  center(cell: number): { x: number; y: number };
+}
+
+/** 腳的代表點：用腳踝（比腳尖穩定）。 */
+export function footPoint(pose: Pose, foot: 'L' | 'R'): Point {
+  return pose[foot === 'L' ? LM.LEFT_ANKLE : LM.RIGHT_ANKLE];
+}
+
 /**
  * 地板九宮格：以玩家視角定義（col 0 = 玩家左邊），對應到影像座標。
  * 玩家面對相機，所以玩家的左邊在影像中是 x 較大的那側。
  */
-export class FloorGrid {
+export class FloorGrid implements DanceGrid {
   constructor(readonly cal: GridCalibration) {}
 
   private rowBounds(): number[] {
@@ -128,10 +143,5 @@ export class FloorGrid {
       x: poly.reduce((a, p) => a + p.x, 0) / 4,
       y: poly.reduce((a, p) => a + p.y, 0) / 4,
     };
-  }
-
-  /** 腳的代表點：用腳踝（比腳尖穩定）。 */
-  static footPoint(pose: Pose, foot: 'L' | 'R'): Point {
-    return pose[foot === 'L' ? LM.LEFT_ANKLE : LM.RIGHT_ANKLE];
   }
 }

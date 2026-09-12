@@ -52,6 +52,7 @@ export interface DanceRecord {
 const HISTORY_KEY = 'arfit.history.v1';
 const SETTINGS_KEY = 'arfit.settings.v1';
 const DANCE_KEY = 'arfit.dance.v1';
+const DANCE_CALIB_KEY = 'arfit.dance.calib.v1';
 
 function read<T>(key: string, fallback: T): T {
   try {
@@ -116,4 +117,20 @@ export function saveDanceRecord(rec: DanceRecord): boolean {
   all[rec.levelId] = rec;
   write(DANCE_KEY, all);
   return true;
+}
+
+export function loadDanceCalibration<T>(): T | null {
+  return read<T | null>(DANCE_CALIB_KEY, null);
+}
+
+export function saveDanceCalibration(cal: unknown): void {
+  write(DANCE_CALIB_KEY, cal);
+}
+
+export function clearDanceCalibration(): void {
+  try {
+    localStorage.removeItem(DANCE_CALIB_KEY);
+  } catch {
+    /* ignore */
+  }
 }

@@ -2,14 +2,15 @@ import { BeatAudio } from '../dance/audio';
 import { chartLengthBeats, generateChart, LEVEL_BY_ID } from '../dance/chart';
 import { FootTracker, GestureTracker } from '../dance/detect';
 import { DanceGame, type JudgeEvent } from '../dance/game';
-import { averageCalibrations, calibrateFromPose, FloorGrid, type GridCalibration } from '../dance/grid';
+import { calibrateFromPose, CELL_W_RATIO, FloorGrid, footPoint, type DanceGrid } from '../dance/grid';
+import { CALIB_DIRS, MeasuredGrid, type MeasuredCalibration, type Pt } from '../dance/measuredGrid';
 import { CELL_NAMES, GESTURE_ICONS, GESTURE_NAMES, type Judgement, type Level, type Note } from '../dance/types';
 import { allVisible } from '../pose/angles';
 import { Camera } from '../pose/camera';
 import { PoseDetector } from '../pose/detector';
 import { FULL_BODY_POINTS, type Pose } from '../pose/landmarks';
 import { speech } from '../speech';
-import { saveDanceRecord, type DanceRecord, type Settings } from '../storage';
+import { loadDanceCalibration, saveDanceCalibration, saveDanceRecord, type DanceRecord, type Settings } from '../storage';
 import { DanceOverlay, FOOT_COLOR, FOOT_LABEL, type FlashDraw, type TargetDraw } from './danceOverlay';
 import { el } from './dom';
 import { CONTROL_HINT, drawHoldRing, HoldController } from '../control/gestures';
@@ -63,6 +64,9 @@ export function mountDance(root: HTMLElement, level: Level, settings: Settings, 
   const judgePop = el('div', { class: 'judge-pop' });
   const progressBar = el('div');
   const hint = el('div', { class: 'cue' });
+  const calStatus = el('span', { class: 'chip accent' });
+  const calSkipBtn = el('button', { class: 'btn secondary small', onClick: () => skipGuidedCalibration() }, ['略過，用自動估計']);
+  const calActions = el('div', { class: 'hud-actions cal-actions', hidden: true }, [calStatus, el('span', { class: 'spacer' }), calSkipBtn]);
   const panel = el('div', { class: 'panel' });
   const holdLabel = el('span');
   const holdFill = el('i');
@@ -81,7 +85,7 @@ export function mountDance(root: HTMLElement, level: Level, settings: Settings, 
     lane,
     gestureBanner,
     judgePop,
-    el('div', { class: 'hud-bottom' }, [hint, el('div', { class: 'progress' }, [progressBar])]),
+    el('div', { class: 'hud-bottom' }, [hint, el('div', { class: 'progress' }, [progressBar]), calActions]),
     panel,
   ]);
   root.append(wrap);
@@ -95,15 +99,23 @@ export function mountDance(root: HTMLElement, level: Level, settings: Settings, 
   const notes = generateChart(level);
   const totalBeats = chartLengthBeats(notes);
   let game = new DanceGame(notes, level.bpm);
-  let grid: FloorGrid | null = null;
+  let grid: DanceGrid | null = null;
   let phase: Phase = 'loading';
   let rafId = 0;
   let timerId = 0;
   let disposed = false;
   let perfStart = 0;
-  let calSamples: GridCalibration[] = [];
-  let calAnchor: { x: number; y: number } | null = null;
-  let calStableSince = 0;
+  // 引導式校正狀態
+  type CalStage = 'center' | 'step' | 'return';
+  let calStage: CalStage = 'center';
+  let calDir = 0;
+  let calQuick = false;
+  let calCenter: Pt | null = null;
+  let calLegLen = 0;
+  let calAnchors: Partial<Record<'front' | 'back' | 'left' | 'right', Pt>> = {};
+  let calHist: Array<{ t: number; L: Pt; R: Pt; mid: Pt }> = [];
+  let provisional: FloorGrid | null = null;
+  let calFromSaved = false;
   const flashes: Array<FlashDraw & { until: number }> = [];
   const announced = new Set<number>();
   let lastBeatInt = -1;
@@ -141,43 +153,181 @@ export function mountDance(root: HTMLElement, level: Level, settings: Settings, 
   }
 
   // ───── 校正 ─────
-  function startCalibrate(): void {
+  function startCalibrate(quick = false): void {
     phase = 'calibrate';
     grid = null;
-    calSamples = [];
-    calAnchor = null;
-    calStableSince = 0;
+    provisional = null;
+    calStage = 'center';
+    calDir = 0;
+    calQuick = quick;
+    calCenter = null;
+    calAnchors = {};
+    calHist = [];
+    calFromSaved = false;
     feet.reset();
     gestures.reset();
     panel.hidden = true;
+    calActions.hidden = false;
+    calSkipBtn.hidden = quick;
+    calStatus.textContent = quick ? '自動估計' : '校正 0/4';
     hint.className = 'cue';
     hint.textContent = '請站到畫面中央，雙腳併攏，讓全身入鏡';
     speech.speak('請站到畫面中央，雙腳併攏，面對相機', { interrupt: true });
   }
 
-  function calibrateFrame(pose: Pose | null, now: number): void {
-    if (!pose || !allVisible(pose, FULL_BODY_POINTS, 0.45)) {
-      hint.textContent = '請退後一點，讓全身（含腳踝）入鏡';
-      calSamples = [];
-      calStableSince = 0;
+  function skipGuidedCalibration(): void {
+    if (provisional) {
+      grid = provisional;
+      calActions.hidden = true;
+      showReady();
       return;
     }
-    const cal = calibrateFromPose(pose, settings.danceCellScale);
-    if (!cal) return;
-    const mid = { x: cal.cx, y: cal.cy };
-    const moved = calAnchor ? Math.hypot(mid.x - calAnchor.x, mid.y - calAnchor.y) : Infinity;
-    if (moved > cal.w * 0.15) {
-      calAnchor = mid;
-      calSamples = [];
-      calStableSince = now;
+    calQuick = true;
+    calSkipBtn.hidden = true;
+    calStatus.textContent = '自動估計';
+  }
+
+  /** 最近 windowMs 內某個點的最大偏移是否小於 tol（穩定不動） */
+  function isStable(get: (h: { L: Pt; R: Pt; mid: Pt }) => Pt, now: number, windowMs: number, tol: number): boolean {
+    const win = calHist.filter((h) => h.t >= now - windowMs);
+    if (win.length < 4 || calHist[0].t > now - windowMs) return false;
+    const last = get(win[win.length - 1]);
+    return win.every((h) => Math.hypot(get(h).x - last.x, get(h).y - last.y) < tol);
+  }
+
+  function avgOver(get: (h: { L: Pt; R: Pt; mid: Pt }) => Pt, now: number, windowMs: number): Pt {
+    const win = calHist.filter((h) => h.t >= now - windowMs);
+    const n = Math.max(1, win.length);
+    return {
+      x: win.reduce((a, h) => a + get(h).x, 0) / n,
+      y: win.reduce((a, h) => a + get(h).y, 0) / n,
+    };
+  }
+
+  function announceStep(): void {
+    const dir = CALIB_DIRS[calDir];
+    calStatus.textContent = `校正 ${calDir}/4`;
+    hint.className = 'cue';
+    hint.textContent = `第 ${calDir + 1} 步：往「${dir.label}」踩一步，停住`;
+    speech.speak(`第 ${calDir + 1} 步，${dir.say}`, { interrupt: true });
+  }
+
+  function calibrateFrame(pose: Pose | null, now: number): void {
+    if (!pose || !allVisible(pose, FULL_BODY_POINTS, 0.45)) {
+      if (calStage === 'center') hint.textContent = '請退後一點，讓全身（含腳踝）入鏡';
+      calHist = [];
+      return;
     }
-    calSamples.push(cal);
-    const stableFor = (now - calStableSince) / 1000;
-    hint.textContent = stableFor < 1.5 ? `保持不動… ${Math.max(0, 1.5 - stableFor).toFixed(1)} 秒` : '';
-    if (stableFor >= 1.5 && calSamples.length >= 10) {
-      grid = new FloorGrid(averageCalibrations(calSamples.slice(-20)));
-      showReady();
+    const L = footPoint(pose, 'L');
+    const R = footPoint(pose, 'R');
+    calHist.push({ t: now, L: { x: L.x, y: L.y }, R: { x: R.x, y: R.y }, mid: { x: (L.x + R.x) / 2, y: (L.y + R.y) / 2 } });
+    while (calHist.length && calHist[0].t < now - 2000) calHist.shift();
+
+    if (calStage === 'center') {
+      const cal = calibrateFromPose(pose, settings.danceCellScale);
+      if (!cal) return;
+      const legLen = cal.w / (CELL_W_RATIO * settings.danceCellScale);
+      const stable = isStable((h) => h.mid, now, 1500, legLen * 0.06);
+      const oldest = calHist[0]?.t ?? now;
+      const stableFor = Math.min(1.5, (now - oldest) / 1000);
+      hint.textContent = stable ? '' : `站在中央保持不動… ${Math.max(0, 1.5 - stableFor).toFixed(1)} 秒`;
+      if (!stable) return;
+      calCenter = avgOver((h) => h.mid, now, 1500);
+      calLegLen = legLen;
+      provisional = new FloorGrid({ ...cal, cx: calCenter.x, cy: calCenter.y });
+      if (calQuick) {
+        grid = provisional;
+        calActions.hidden = true;
+        showReady();
+        return;
+      }
+      calStage = 'step';
+      calDir = 0;
+      calHist = [];
+      announceStep();
+      return;
     }
+
+    if (!calCenter) return;
+    const dir = CALIB_DIRS[calDir];
+    if (calStage === 'step') {
+      const last = calHist[calHist.length - 1];
+      const dL = Math.hypot(last.L.x - calCenter.x, last.L.y - calCenter.y);
+      const dR = Math.hypot(last.R.x - calCenter.x, last.R.y - calCenter.y);
+      const useL = dL >= dR;
+      const get = (h: { L: Pt; R: Pt }) => (useL ? h.L : h.R);
+      const moved = Math.max(dL, dR) > calLegLen * 0.28;
+      if (!moved) return;
+      if (!isStable(get, now, 800, calLegLen * 0.05)) return;
+      const cand = avgOver(get, now, 800);
+      // 前後要相反、左右要相反（方向由使用者第一步定義，不預設在畫面哪一邊）
+      let problem: string | null = null;
+      if (dir.key === 'back' && calAnchors.front && (cand.y - calCenter.y) * (calAnchors.front.y - calCenter.y) > 0) problem = '「後」要跟「前」相反的方向';
+      if (dir.key === 'right' && calAnchors.left && (cand.x - calCenter.x) * (calAnchors.left.x - calCenter.x) > 0) problem = '「右」要跟「左」相反的方向';
+      if (problem) {
+        hint.className = 'cue warn';
+        hint.textContent = `${problem}，請回到中央再試一次`;
+        speech.speak(problem, { interrupt: true });
+        calStage = 'return';
+        calHist = [];
+        return;
+      }
+      calAnchors[dir.key] = cand;
+      flashes.push({ cell: dir.cell, color: '#4ade80', alpha: 1, until: now + 500 });
+      audio.playJudgement('perfect');
+      calStatus.textContent = `校正 ${calDir + 1}/4`;
+      hint.className = 'cue good';
+      hint.textContent = '好！回到中央';
+      speech.speak('好，回到中央', { interrupt: true });
+      calStage = 'return';
+      calHist = [];
+      return;
+    }
+
+    // return：雙腳回到中央附近並停穩
+    const last = calHist[calHist.length - 1];
+    const back = Math.hypot(last.mid.x - calCenter.x, last.mid.y - calCenter.y) < calLegLen * 0.2;
+    if (!back || !isStable((h) => h.mid, now, 400, calLegLen * 0.05)) return;
+    if (calAnchors[dir.key] === undefined) {
+      // 剛才方向錯了，重做同一步
+      calHist = [];
+      calStage = 'step';
+      announceStep();
+      return;
+    }
+    if (calDir + 1 < CALIB_DIRS.length) {
+      calDir += 1;
+      calHist = [];
+      calStage = 'step';
+      announceStep();
+      return;
+    }
+    const cal: MeasuredCalibration = {
+      center: calCenter,
+      front: calAnchors.front!,
+      back: calAnchors.back!,
+      left: calAnchors.left!,
+      right: calAnchors.right!,
+      width: video.videoWidth,
+      height: video.videoHeight,
+      facing: camera.facing,
+      date: new Date().toISOString(),
+    };
+    const err = MeasuredGrid.validate(cal);
+    if (err) {
+      hint.className = 'cue danger';
+      hint.textContent = `${err}，重新校正`;
+      speech.speak(`${err}，重新校正`, { interrupt: true });
+      window.setTimeout(() => {
+        if (phase === 'calibrate') startCalibrate();
+      }, 1500);
+      return;
+    }
+    saveDanceCalibration(cal);
+    grid = new MeasuredGrid(cal);
+    calActions.hidden = true;
+    calStatus.textContent = '校正 4/4';
+    showReady();
   }
 
   function showReady(): void {
@@ -204,6 +354,14 @@ export function mountDance(root: HTMLElement, level: Level, settings: Settings, 
     setPanel(
       el('div', { class: 'ready-panel' }, [
         el('h2', {}, ['九宮格已就位']),
+        el('p', { class: 'note' }, [
+          calFromSaved
+            ? '已使用上次的九宮格校正。若手機位置或距離變了，請重新校正。'
+            : grid instanceof MeasuredGrid
+              ? '九宮格已依您剛才實際踩的位置建立，之後會自動沿用。'
+              : '目前是自動估計的九宮格；想更準可以重新校正（走 4 步）。',
+        ]),
+        el('p', { class: 'note' }, ['可以先在原地往前後左右走幾步，看腳的圓點是否落在對的格子。']),
         el('p', {}, [settings.danceFloorMode === 'pad'
             ? settings.danceUpIsBack
               ? '腳邊的跳舞墊像照鏡子：上排＝往後退、下排＝往手機走，亮起的格子就是要踩的位置。'
@@ -211,7 +369,7 @@ export function mountDance(root: HTMLElement, level: Level, settings: Settings, 
             : '亮起的格子就是要踩的位置。', el('br'), el('b', { style: `color:${FOOT_COLOR.L}` }, ['藍色 = 左腳']), '　', el('b', { style: `color:${FOOT_COLOR.R}` }, ['橘色 = 右腳']), '　', el('b', { style: `color:${FOOT_COLOR.both}` }, ['綠色 = 雙腳跳']), el('br'), '外框縮到貼齊格子的那一刻踩下去最準。', el('br'), '看到 🙌 👏 ↔️ 就做出對應手勢。']),
         el('div', { class: 'actions' }, [
           startBtn,
-          el('button', { class: 'btn secondary block', onClick: () => startCalibrate() }, ['重新校正']),
+          el('button', { class: 'btn secondary block', onClick: () => startCalibrate() }, ['重新校正（走 4 步）']),
         ]),
         autoNote,
         holdBar,
@@ -444,7 +602,13 @@ export function mountDance(root: HTMLElement, level: Level, settings: Settings, 
       flashes[i].alpha = Math.max(0, (flashes[i].until - now) / 400);
       if (flashes[i].alpha <= 0) flashes.splice(i, 1);
     }
-    const previewGrid = phase === 'calibrate' && currentPose ? previewGridFrom(currentPose) : grid;
+    if (phase === 'calibrate' && calStage === 'step') {
+      const dir = CALIB_DIRS[calDir];
+      targets.push({ cell: dir.cell, foot: 'both', progress: 1, label: dir.label });
+    } else if (phase === 'calibrate' && calStage === 'return') {
+      targets.push({ cell: 4, foot: 'both', progress: 0.6, label: '中' });
+    }
+    const previewGrid = phase === 'calibrate' ? (provisional ?? (currentPose ? previewGridFrom(currentPose) : null)) : grid;
     let beatPulse = 0;
     if (phase === 'playing' || phase === 'countdown') {
       const frac = audio.beatAt(now) % 1;
@@ -465,7 +629,6 @@ export function mountDance(root: HTMLElement, level: Level, settings: Settings, 
   }
 
   function previewGridFrom(pose: Pose): FloorGrid | null {
-    if (calSamples.length) return new FloorGrid(averageCalibrations(calSamples.slice(-10)));
     const cal = calibrateFromPose(pose, settings.danceCellScale);
     return cal ? new FloorGrid(cal) : null;
   }
@@ -496,7 +659,18 @@ export function mountDance(root: HTMLElement, level: Level, settings: Settings, 
       if (disposed) return;
       cancelAnimationFrame(rafId);
       loop();
-      startCalibrate();
+      const saved = loadDanceCalibration<MeasuredCalibration>();
+      if (
+        saved &&
+        saved.facing === camera.facing &&
+        saved.width === video.videoWidth &&
+        saved.height === video.videoHeight &&
+        MeasuredGrid.validate(saved) === null
+      ) {
+        grid = new MeasuredGrid(saved);
+        calFromSaved = true;
+        showReady();
+      } else startCalibrate();
     } catch (err) {
       console.error(err);
       showError((err as Error).message ?? String(err));

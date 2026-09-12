@@ -1,5 +1,5 @@
 import { LM, SKELETON, type Pose } from '../pose/landmarks';
-import type { FloorGrid } from '../dance/grid';
+import type { DanceGrid } from '../dance/grid';
 import { CELL_NAMES, cellCol, cellRow, type Foot } from '../dance/types';
 
 export interface TargetDraw {
@@ -7,6 +7,8 @@ export interface TargetDraw {
   foot: Foot | 'both';
   /** 0 = 還很遠，1 = 就是現在 */
   progress: number;
+  /** 覆蓋格子上的文字（預設依腳顯示 左／右／跳） */
+  label?: string;
 }
 
 export interface FlashDraw {
@@ -18,7 +20,7 @@ export interface FlashDraw {
 
 export interface DanceOverlayOptions {
   mirrored: boolean;
-  grid: FloorGrid | null;
+  grid: DanceGrid | null;
   feet: Record<Foot, number | null>;
   targets: TargetDraw[];
   flashes: FlashDraw[];
@@ -132,7 +134,7 @@ export class DanceOverlay {
         ctx.lineWidth = (4 + 3 * p) * scale;
         ctx.stroke();
         const c = opts.grid.center(t.cell);
-        const label = t.foot === 'both' ? '跳' : t.foot === 'L' ? '左' : '右';
+        const label = t.label ?? (t.foot === 'both' ? '跳' : t.foot === 'L' ? '左' : '右');
         ctx.font = `bold ${26 * scale}px system-ui, sans-serif`;
         ctx.textAlign = 'center';
         ctx.lineWidth = 5 * scale;
@@ -209,8 +211,9 @@ export class DanceOverlay {
     const cell = Math.min(w, h) * 0.22;
     const padW = cell * 3;
     const pad = 12 * scale;
-    const padCx = Math.min(w - padW / 2 - pad, Math.max(padW / 2 + pad, opts.grid.cal.cx));
-    const padCy = Math.min(h - padW / 2 - 40 * scale, Math.max(padW / 2 + 60 * scale, opts.grid.cal.cy));
+    const gc = opts.grid.center(4);
+    const padCx = Math.min(w - padW / 2 - pad, Math.max(padW / 2 + pad, gc.x));
+    const padCy = Math.min(h - padW / 2 - 40 * scale, Math.max(padW / 2 + 60 * scale, gc.y));
     const padTop = padCy - padW / 2;
     // 資料格 → 影像座標矩形（col 0 = 玩家左 = 影像 x 較大）
     // upIsBack：row 0（後）在上排，跟鏡像影像一致；否則 row 2（前）在上排
@@ -277,7 +280,7 @@ export class DanceOverlay {
       ctx.strokeStyle = color;
       ctx.lineWidth = (4 + 3 * p) * scale;
       ctx.stroke();
-      const label = t.foot === 'both' ? '跳' : t.foot === 'L' ? '左' : '右';
+      const label = t.label ?? (t.foot === 'both' ? '跳' : t.foot === 'L' ? '左' : '右');
       ctx.font = `bold ${cell * 0.42}px system-ui, sans-serif`;
       ctx.textAlign = 'center';
       ctx.lineWidth = 5 * scale;

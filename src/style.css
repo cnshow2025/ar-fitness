@@ -782,3 +782,13 @@ table.summary td.num {
     transform: scale(1.12);
   }
 }
+
+.cal-actions {
+  align-items: center;
+}
+.cal-actions[hidden] {
+  display: none;
+}
+.cal-actions .btn {
+  flex: 0 0 auto;
+}

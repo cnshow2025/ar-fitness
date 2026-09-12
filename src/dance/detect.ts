@@ -1,6 +1,5 @@
 import { LM, type Pose } from '../pose/landmarks';
-import type { FloorGrid } from './grid';
-import { FloorGrid as Grid } from './grid';
+import { footPoint, type DanceGrid } from './grid';
 import type { Foot, Gesture } from './types';
 
 export interface FootEvent {
@@ -17,10 +16,10 @@ export class FootTracker {
 
   constructor(private readonly dwellFrames = 2) {}
 
-  update(pose: Pose, grid: FloorGrid, t: number): FootEvent[] {
+  update(pose: Pose, grid: DanceGrid, t: number): FootEvent[] {
     const events: FootEvent[] = [];
     for (const foot of ['L', 'R'] as Foot[]) {
-      const p = Grid.footPoint(pose, foot);
+      const p = footPoint(pose, foot);
       if (p.visibility < 0.4) continue;
       const cell = grid.cellOf(p);
       if (cell === this.cells[foot]) {
