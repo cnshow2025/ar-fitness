@@ -219,9 +219,9 @@ function settingsTab(settings: Settings): HTMLElement {
     ),
     toggleRow(
       '跳舞語音報格',
-      '跳舞時提前一拍念出下一步（BPM 太快時自動關閉）',
-      () => settings.danceVoice,
-      (v) => (settings.danceVoice = v),
+      '跳舞時提前一拍念出下一步（預設關閉；BPM 太快時自動關閉）',
+      () => settings.danceCallout,
+      (v) => (settings.danceCallout = v),
     ),
   );
   const offsetVal = el('b', {}, [`${settings.danceOffsetMs} ms`]);

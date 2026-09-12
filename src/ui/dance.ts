@@ -34,22 +34,6 @@ function noteVoice(n: Note): string {
   return `${n.foot === 'L' ? '左' : '右'}，${CELL_NAMES[n.cell]}`;
 }
 
-/** 小小的 3×3 預告圖示。 */
-function miniGrid(n: Note): HTMLElement {
-  const g = el('div', { class: 'mini-grid' });
-  if (n.kind === 'gesture') {
-    g.classList.add('gesture');
-    g.textContent = GESTURE_ICONS[n.gesture];
-    return g;
-  }
-  for (let i = 0; i < 9; i++) {
-    const c = el('i');
-    if (i === n.cell) c.style.background = FOOT_COLOR[n.foot];
-    g.append(c);
-  }
-  return g;
-}
-
 /** 跳舞九宮格遊戲畫面。回傳清理函式。 */
 export function mountDance(root: HTMLElement, level: Level, settings: Settings, handlers: DanceHandlers): () => void {
   root.innerHTML = '';
@@ -63,7 +47,10 @@ export function mountDance(root: HTMLElement, level: Level, settings: Settings, 
   const canvas = el('canvas');
   const scoreEl = el('div', { class: 'counter' }, ['0']);
   const comboEl = el('div', { class: 'combo' });
-  const beatDot = el('span', { class: 'beat-dot' });
+  const beatLights = Array.from({ length: 4 }, () => el('span', { class: 'beat-light' }));
+  const previewCells = Array.from({ length: 9 }, () => el('div', { class: 'pv-cell' }));
+  const previewGesture = el('div', { class: 'pv-gesture' });
+  const preview = el('div', { class: 'preview-grid', hidden: true }, [previewGesture, el('div', { class: 'pv-grid' }, previewCells)]);
   const lane = el('div', { class: 'dance-lane' });
   const gestureBanner = el('div', { class: 'gesture-banner', hidden: true });
   const judgePop = el('div', { class: 'judge-pop' });
@@ -79,10 +66,11 @@ export function mountDance(root: HTMLElement, level: Level, settings: Settings, 
     canvas,
     el('div', { class: 'hud-top' }, [
       el('button', { class: 'icon-btn', 'aria-label': '返回', onClick: () => exit() }, ['✕']),
-      el('div', { class: 'title' }, [el('b', {}, [`第 ${level.id} 關 ${level.name}`]), el('span', {}, [`${level.bpm} BPM `, beatDot])]),
+      el('div', { class: 'title' }, [el('b', {}, [`第 ${level.id} 關 ${level.name}`]), el('span', { class: 'beat-lights' }, [`${level.bpm} BPM `, ...beatLights])]),
       el('div', {}, [scoreEl, comboEl]),
       flipBtn,
     ]),
+    preview,
     lane,
     gestureBanner,
     judgePop,
@@ -112,6 +100,7 @@ export function mountDance(root: HTMLElement, level: Level, settings: Settings, 
   const flashes: Array<FlashDraw & { until: number }> = [];
   const announced = new Set<number>();
   let lastBeatInt = -1;
+  let lastPreviewKey = '';
   let currentPose: Pose | null = null;
   const control = new HoldController();
   let readyTimer = 0;
@@ -235,6 +224,8 @@ export function mountDance(root: HTMLElement, level: Level, settings: Settings, 
     lastBeatInt = -1;
     setPanel(null);
     perfStart = audio.start(level.bpm, totalBeats, 0.5);
+    lastPreviewKey = '';
+    preview.hidden = false;
     renderLane(0);
   }
 
@@ -248,6 +239,7 @@ export function mountDance(root: HTMLElement, level: Level, settings: Settings, 
       hint.textContent = '';
     }
     hint.className = 'cue big';
+    updateBeatLights(beat);
   }
 
   function showJudge(j: Judgement): void {
@@ -271,18 +263,42 @@ export function mountDance(root: HTMLElement, level: Level, settings: Settings, 
   }
 
   function renderLane(tMs: number): void {
-    lane.innerHTML = '';
-    const next = game.upcoming(tMs, 4);
-    next.forEach((u, i) => {
-      const item = el('div', { class: `lane-item ${i === 0 ? 'first' : ''}` }, [miniGrid(u.note), el('span', {}, [noteLabel(u.note)])]);
-      lane.append(item);
-    });
+    const next = game.upcoming(tMs, 5);
+    const key = next.map((u) => u.index).join(',');
+    if (key !== lastPreviewKey) {
+      lastPreviewKey = key;
+      lane.innerHTML = '';
+      next.forEach((u, i) => {
+        const item = el('div', { class: `lane-item ${i === 0 ? 'first' : ''}` }, [
+          el('b', { class: 'lane-num', style: `background:${u.note.kind === 'step' ? FOOT_COLOR[u.note.foot] : '#a78bfa'}` }, [String(i + 1)]),
+          el('span', {}, [noteLabel(u.note)]),
+        ]);
+        lane.append(item);
+      });
+      // 平面預告九宮格：數字 1～5 放在對應格子
+      previewCells.forEach((c) => (c.innerHTML = ''));
+      previewGesture.innerHTML = '';
+      next.forEach((u, i) => {
+        if (u.note.kind === 'gesture') {
+          previewGesture.append(el('span', { class: `pv-badge n${i + 1} gesture` }, [`${i + 1} ${GESTURE_ICONS[u.note.gesture]}`]));
+          return;
+        }
+        previewCells[u.note.cell].append(
+          el('span', { class: `pv-badge n${i + 1}`, style: `background:${FOOT_COLOR[u.note.foot]}` }, [String(i + 1)]),
+        );
+      });
+    }
     const first = next[0];
     if (first && first.note.kind === 'gesture' && first.msUntil < msPerBeat * 2) {
       const p = Math.min(1, Math.max(0, 1 - first.msUntil / (msPerBeat * 2)));
       gestureBanner.hidden = false;
       gestureBanner.innerHTML = `<div class="ring" style="--p:${p}"><span>${GESTURE_ICONS[first.note.gesture]}</span></div><b>${GESTURE_NAMES[first.note.gesture]}</b>`;
     } else gestureBanner.hidden = true;
+  }
+
+  function updateBeatLights(beat: number): void {
+    const idx = beat >= 0 ? Math.floor(beat) % 4 : -1;
+    beatLights.forEach((l, i) => l.classList.toggle('on', i === idx));
   }
 
   function playFrame(pose: Pose | null, now: number): void {
@@ -296,8 +312,8 @@ export function mountDance(root: HTMLElement, level: Level, settings: Settings, 
     }
     handleEvents(game.onFrame({ feet: feet.cells, gestures: gestures.active }, t), now);
 
-    // 語音報格：提前一拍
-    if (settings.danceVoice && level.bpm <= 115) {
+    // 語音報格（預設關閉）：提前一拍
+    if (settings.danceCallout && level.bpm <= 115) {
       for (const u of game.upcoming(t, 2)) {
         if (!announced.has(u.index) && u.msUntil <= msPerBeat * 1.1) {
           announced.add(u.index);
@@ -310,9 +326,7 @@ export function mountDance(root: HTMLElement, level: Level, settings: Settings, 
     const beatInt = Math.floor(audio.beatAt(now));
     if (beatInt !== lastBeatInt) {
       lastBeatInt = beatInt;
-      beatDot.classList.remove('pulse');
-      void beatDot.offsetWidth;
-      beatDot.classList.add('pulse');
+      updateBeatLights(audio.beatAt(now));
     }
     progressBar.style.width = `${Math.min(100, (t / (totalBeats * msPerBeat)) * 100)}%`;
     renderLane(t);
@@ -332,7 +346,9 @@ export function mountDance(root: HTMLElement, level: Level, settings: Settings, 
     phase = 'result';
     audio.stop();
     lane.innerHTML = '';
+    preview.hidden = true;
     gestureBanner.hidden = true;
+    updateBeatLights(-1);
     const rec: DanceRecord = {
       levelId: level.id,
       score: game.score,
@@ -418,6 +434,11 @@ export function mountDance(root: HTMLElement, level: Level, settings: Settings, 
       if (flashes[i].alpha <= 0) flashes.splice(i, 1);
     }
     const previewGrid = phase === 'calibrate' && currentPose ? previewGridFrom(currentPose) : grid;
+    let beatPulse = 0;
+    if (phase === 'playing' || phase === 'countdown') {
+      const frac = audio.beatAt(now) % 1;
+      if (frac >= 0) beatPulse = Math.max(0, 1 - frac * 3);
+    }
     overlay.draw(frame.pose, {
       mirrored: camera.mirrored,
       grid: previewGrid,
@@ -425,6 +446,7 @@ export function mountDance(root: HTMLElement, level: Level, settings: Settings, 
       targets,
       flashes,
       showLabels: phase !== 'playing',
+      beatPulse,
     });
     if (phase === 'ready' || phase === 'result') drawHoldRing(canvas, control.state, camera.mirrored);
   }

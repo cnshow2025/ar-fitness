@@ -57,9 +57,11 @@ export class BeatAudio {
       if (t > this.ctx.currentTime + ahead) break;
       if (this.enabled) {
         const inBar = this.nextBeat % 4;
-        this.kick(t, inBar === 0 ? 1 : 0.7);
-        if (inBar === 0) this.click(t, 1400, 0.25);
-        this.hat(t + secPerBeat / 2, 0.18);
+        this.kick(t, inBar === 0 ? 1.2 : 0.95);
+        if (inBar === 0) this.click(t, 1800, 0.45, 0.09);
+        else this.click(t, 1000, 0.22, 0.05);
+        if (inBar === 1 || inBar === 3) this.snare(t, 0.35);
+        this.hat(t + secPerBeat / 2, 0.12);
       }
       this.nextBeat += 1;
     }
@@ -92,6 +94,22 @@ export class BeatAudio {
     src.connect(bp).connect(g).connect(this.master);
     src.start(t);
     src.stop(t + 0.06);
+  }
+
+  private snare(t: number, vol: number): void {
+    if (!this.ctx || !this.master || !this.noise) return;
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.noise;
+    const bp = this.ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 1800;
+    bp.Q.value = 0.8;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+    src.connect(bp).connect(g).connect(this.master);
+    src.start(t);
+    src.stop(t + 0.13);
   }
 
   private click(t: number, freq: number, vol: number, dur = 0.06): void {

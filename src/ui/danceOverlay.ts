@@ -23,6 +23,8 @@ export interface DanceOverlayOptions {
   targets: TargetDraw[];
   flashes: FlashDraw[];
   showLabels: boolean;
+  /** 0..1，剛打到拍點時為 1，之後衰減；用來讓格線隨節拍閃動 */
+  beatPulse: number;
 }
 
 export const FOOT_COLOR: Record<Foot | 'both', string> = {
@@ -67,20 +69,33 @@ export class DanceOverlay {
     };
 
     if (opts.grid) {
-      // 九宮格底
+      // 九宮格底：先鋪深色底，再畫「深色描邊 + 白色亮線」的雙層格線
       for (let cell = 0; cell < 9; cell++) {
         poly(cell);
-        ctx.fillStyle = cell === 4 ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.05)';
+        ctx.fillStyle = cell === 4 ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.28)';
         ctx.fill();
-        ctx.strokeStyle = 'rgba(255,255,255,0.55)';
-        ctx.lineWidth = 2 * scale;
+      }
+      const glow = 0.55 + 0.45 * opts.beatPulse;
+      for (let cell = 0; cell < 9; cell++) {
+        poly(cell);
+        ctx.strokeStyle = 'rgba(0,0,0,0.75)';
+        ctx.lineWidth = 9 * scale;
+        ctx.lineJoin = 'round';
         ctx.stroke();
-        if (opts.showLabels) {
+        ctx.strokeStyle = `rgba(255,255,255,${glow})`;
+        ctx.lineWidth = (4 + 2 * opts.beatPulse) * scale;
+        ctx.stroke();
+      }
+      if (opts.showLabels) {
+        for (let cell = 0; cell < 9; cell++) {
           const c = opts.grid.center(cell);
-          ctx.fillStyle = 'rgba(255,255,255,0.55)';
-          ctx.font = `${12 * scale}px system-ui, sans-serif`;
+          ctx.font = `bold ${16 * scale}px system-ui, sans-serif`;
           ctx.textAlign = 'center';
-          ctx.fillText(CELL_NAMES[cell], mx(c.x), c.y + 4 * scale);
+          ctx.lineWidth = 4 * scale;
+          ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+          ctx.strokeText(CELL_NAMES[cell], mx(c.x), c.y + 6 * scale);
+          ctx.fillStyle = '#fff';
+          ctx.fillText(CELL_NAMES[cell], mx(c.x), c.y + 6 * scale);
         }
       }
       // 命中閃光
@@ -91,25 +106,32 @@ export class DanceOverlay {
         ctx.fill();
         ctx.globalAlpha = 1;
       }
-      // 目標格：外框由大縮小到貼齊格子，填色隨接近變濃
+      // 目標格：整格實心亮色（隨接近變濃、隨節拍脈動），外框由大縮小到貼齊格子
       for (const t of opts.targets) {
         const color = FOOT_COLOR[t.foot];
         const p = Math.min(1, Math.max(0, t.progress));
         poly(t.cell);
         ctx.fillStyle = color;
-        ctx.globalAlpha = 0.15 + 0.45 * p;
+        ctx.globalAlpha = 0.45 + 0.4 * p + 0.15 * opts.beatPulse;
         ctx.fill();
         ctx.globalAlpha = 1;
         const inset = -(1 - p) * 0.9; // 負 inset = 放大
         poly(t.cell, inset);
+        ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+        ctx.lineWidth = (7 + 3 * p) * scale;
+        ctx.stroke();
         ctx.strokeStyle = color;
-        ctx.lineWidth = (3 + 3 * p) * scale;
+        ctx.lineWidth = (4 + 3 * p) * scale;
         ctx.stroke();
         const c = opts.grid.center(t.cell);
-        ctx.fillStyle = '#fff';
-        ctx.font = `bold ${18 * scale}px system-ui, sans-serif`;
+        const label = t.foot === 'both' ? '跳' : t.foot === 'L' ? '左' : '右';
+        ctx.font = `bold ${26 * scale}px system-ui, sans-serif`;
         ctx.textAlign = 'center';
-        ctx.fillText(t.foot === 'both' ? '跳' : t.foot === 'L' ? '左' : '右', mx(c.x), c.y + 6 * scale);
+        ctx.lineWidth = 5 * scale;
+        ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+        ctx.strokeText(label, mx(c.x), c.y + 9 * scale);
+        ctx.fillStyle = '#fff';
+        ctx.fillText(label, mx(c.x), c.y + 9 * scale);
       }
     }
 

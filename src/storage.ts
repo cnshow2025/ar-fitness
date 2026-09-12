@@ -26,8 +26,8 @@ export interface Settings {
   showAngles: boolean;
   /** 跳舞判定的延遲補償（毫秒），補償相機與姿勢偵測的延遲 */
   danceOffsetMs: number;
-  /** 跳舞時語音報格 */
-  danceVoice: boolean;
+  /** 跳舞時語音報格（預設關閉，節奏用鼓點與畫面就夠清楚） */
+  danceCallout: boolean;
   /** 偵測到人入鏡後自動倒數開始 */
   autoStart: boolean;
   /** 單手高舉／雙手交叉的控制手勢 */
@@ -84,7 +84,7 @@ export function loadSettings(): Settings {
     facing: 'user',
     showAngles: true,
     danceOffsetMs: 100,
-    danceVoice: true,
+    danceCallout: false,
     autoStart: true,
     gestureControl: true,
     ...read<Partial<Settings>>(SETTINGS_KEY, {}),
