@@ -8,7 +8,7 @@ import { CELL_NAMES, GESTURE_ICONS, GESTURE_NAMES, type Judgement, type Level, t
 import { allVisible } from '../pose/angles';
 import { Camera } from '../pose/camera';
 import { PoseDetector } from '../pose/detector';
-import { FULL_BODY_POINTS, type Pose } from '../pose/landmarks';
+import { FULL_BODY_POINTS, LM, type Pose } from '../pose/landmarks';
 import { speech } from '../speech';
 import { loadDanceCalibration, saveDanceCalibration, saveDanceRecord, type DanceRecord, type Settings } from '../storage';
 import { DanceOverlay, FOOT_COLOR, FOOT_LABEL, type FlashDraw, type TargetDraw } from './danceOverlay';
@@ -108,6 +108,7 @@ export function mountDance(root: HTMLElement, level: Level, settings: Settings, 
   // 引導式校正狀態
   type CalStage = 'center' | 'step' | 'return';
   let calStage: CalStage = 'center';
+  let calStageAt = 0;
   let calDir = 0;
   let calQuick = false;
   let calCenter: Pt | null = null;
@@ -206,6 +207,7 @@ export function mountDance(root: HTMLElement, level: Level, settings: Settings, 
 
   function announceStep(): void {
     const dir = CALIB_DIRS[calDir];
+    calStageAt = performance.now();
     calStatus.textContent = `校正 ${calDir}/4`;
     hint.className = 'cue';
     hint.textContent = `第 ${calDir + 1} 步：往「${dir.label}」踩一步，停住`;
@@ -213,8 +215,15 @@ export function mountDance(root: HTMLElement, level: Level, settings: Settings, 
   }
 
   function calibrateFrame(pose: Pose | null, now: number): void {
-    if (!pose || !allVisible(pose, FULL_BODY_POINTS, 0.45)) {
+    // 站中央時要全身入鏡；踩步時只要腳踝看得到就好（往前踩時腳常靠近畫面邊緣）
+    const ankleIds = [LM.LEFT_ANKLE, LM.RIGHT_ANKLE];
+    const ok = pose && (calStage === 'center' ? allVisible(pose, FULL_BODY_POINTS, 0.45) : allVisible(pose, ankleIds, 0.35));
+    if (!pose || !ok) {
       if (calStage === 'center') hint.textContent = '請退後一點，讓全身（含腳踝）入鏡';
+      else if (pose) {
+        hint.className = 'cue warn';
+        hint.textContent = '看不到腳踝了，請把手機放遠一點或步伐小一點';
+      }
       calHist = [];
       return;
     }
@@ -256,10 +265,21 @@ export function mountDance(root: HTMLElement, level: Level, settings: Settings, 
       const dR = Math.hypot(last.R.x - calCenter.x, last.R.y - calCenter.y);
       const useL = dL >= dR;
       const get = (h: { L: Pt; R: Pt }) => (useL ? h.L : h.R);
-      const moved = Math.max(dL, dR) > calLegLen * 0.28;
-      if (!moved) return;
-      if (!isStable(get, now, 800, calLegLen * 0.05)) return;
-      const cand = avgOver(get, now, 800);
+      const moved = Math.max(dL, dR) > calLegLen * 0.2;
+      if (!moved) {
+        if (now - calStageAt > 4000) {
+          hint.className = 'cue warn';
+          hint.textContent = `再往「${dir.label}」踩大步一點，然後停住`;
+        }
+        return;
+      }
+      const tol = Math.max(10, calLegLen * 0.08);
+      if (!isStable(get, now, 600, tol)) {
+        hint.className = 'cue good';
+        hint.textContent = '偵測到了，停住不要動…';
+        return;
+      }
+      const cand = avgOver(get, now, 600);
       // 前後要相反、左右要相反（方向由使用者第一步定義，不預設在畫面哪一邊）
       let problem: string | null = null;
       if (dir.key === 'back' && calAnchors.front && (cand.y - calCenter.y) * (calAnchors.front.y - calCenter.y) > 0) problem = '「後」要跟「前」相反的方向';
@@ -269,6 +289,7 @@ export function mountDance(root: HTMLElement, level: Level, settings: Settings, 
         hint.textContent = `${problem}，請回到中央再試一次`;
         speech.speak(problem, { interrupt: true });
         calStage = 'return';
+        calStageAt = now;
         calHist = [];
         return;
       }
@@ -280,14 +301,19 @@ export function mountDance(root: HTMLElement, level: Level, settings: Settings, 
       hint.textContent = '好！回到中央';
       speech.speak('好，回到中央', { interrupt: true });
       calStage = 'return';
+      calStageAt = now;
       calHist = [];
       return;
     }
 
     // return：雙腳回到中央附近並停穩
     const last = calHist[calHist.length - 1];
-    const back = Math.hypot(last.mid.x - calCenter.x, last.mid.y - calCenter.y) < calLegLen * 0.2;
-    if (!back || !isStable((h) => h.mid, now, 400, calLegLen * 0.05)) return;
+    const back = Math.hypot(last.mid.x - calCenter.x, last.mid.y - calCenter.y) < calLegLen * 0.25;
+    if (!back) {
+      if (now - calStageAt > 3000) hint.textContent = '請回到中央的格子，雙腳併攏';
+      return;
+    }
+    if (!isStable((h) => h.mid, now, 400, Math.max(10, calLegLen * 0.08))) return;
     if (calAnchors[dir.key] === undefined) {
       // 剛才方向錯了，重做同一步
       calHist = [];

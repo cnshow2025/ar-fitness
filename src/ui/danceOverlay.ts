@@ -336,13 +336,6 @@ export class DanceOverlay {
       ctx.font = `bold ${cell * 0.16}px system-ui, sans-serif`;
       ctx.textAlign = 'center';
       ctx.fillText(foot, x, y + cell * 0.06);
-      // 實際腳踝位置也點一下，方便對照
-      ctx.fillStyle = FOOT_COLOR[foot];
-      ctx.globalAlpha = 0.6;
-      ctx.beginPath();
-      ctx.arc(mx(p.x), p.y, 6 * scale, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.globalAlpha = 1;
     }
   }
 }
