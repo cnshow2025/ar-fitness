@@ -1,0 +1,64 @@
+# AR 動作教練（ar-fitness）
+
+線上版本：https://cnshow2025.github.io/ar-fitness/
+
+用手機相機即時偵測肢體動作與關節角度，並依照課程引導您完成運動的 PWA（漸進式網頁 App）。
+
+- 姿勢偵測：[MediaPipe Pose Landmarker](https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker)，33 個身體關鍵點，完全在手機瀏覽器內執行，影像不上傳。
+- AR 疊加：相機畫面上即時畫出骨架、目前動作的關節角度弧線與數字、動作進度條。
+- 關節運動方向：由角度變化速度判斷「屈曲中／伸展中」「抬高中／放下中」等。
+- 動作判定：每個動作有起始角度與目標角度，狀態機自動計次，做一半會提醒「再蹲低一點」，做太快會提醒放慢；維持型動作要撐滿秒數才算一次。
+- 課程（Program）：5 分鐘熱身、全身循環、上肢日、下肢日、關節活動度；也可單獨練習任一動作。
+- 語音提示：念出次數、倒數與動作提示（瀏覽器內建語音，可關閉）。
+- 結束摘要：每個動作的次數與關節活動範圍（最小／最大角度），紀錄存於手機本地。
+
+## 內建動作
+
+| 分類 | 動作 | 量測關節 |
+| --- | --- | --- |
+| 下肢 | 深蹲、原地高抬腿、弓箭步、原地踏步 | 膝、髖 |
+| 上肢 | 手臂側平舉、雙手上舉、手臂彎舉 | 肩、肘 |
+| 關節活動度 | 肩關節外展維持、雙手上舉維持、膝關節屈伸 | 肩、膝 |
+| 核心 | 軀幹側彎 | 軀幹側傾角 |
+
+動作定義在 `src/exercises/definitions.ts`，課程定義在 `src/programs/definitions.ts`，加新動作或課程只要加一筆資料。
+
+## 手機使用方式
+
+1. 用 Chrome（Android）或 Safari（iPhone）開啟部署後的網址（必須是 https，相機才能啟用）。
+2. 允許相機權限。
+3. 手機直立放在腰部高度、距離約 2 公尺，讓全身入鏡（上肢動作只需上半身）。
+4. 瀏覽器選單 →「加入主畫面」，即可全螢幕像 App 一樣使用。
+
+## 開發
+
+```bash
+npm install
+npm run dev      # 會先複製 MediaPipe WASM、下載模型到 public/，再啟動 vite（--host 可讓手機連同網段測試，但相機需要 https 或 localhost）
+npm test         # 單元測試（角度計算、計次狀態機）
+npm run build    # 型別檢查 + 建置到 dist/
+```
+
+要在手機上測試本機開發版，可用 `npx vite --host` 搭配 ngrok 之類的 https 隧道，或直接推上 GitHub 讓 Pages 部署。
+
+## 部署（GitHub Pages）
+
+`.github/workflows/deploy-pages.yml` 會在推送到 `main` 時自動建置並部署。
+
+第一次需要在 GitHub repo 的 **Settings → Pages → Build and deployment → Source** 選 **GitHub Actions**。部署後網址為 `https://<帳號>.github.io/ar-fitness/`。
+
+## 專案結構
+
+```
+src/pose/        相機、MediaPipe 封裝、角度計算、平滑濾波
+src/exercises/   關節指標、動作定義、計次／回饋狀態機
+src/programs/    課程定義
+src/ui/          首頁、訓練畫面（HUD + 骨架疊加）、摘要
+src/speech.ts    語音提示
+src/storage.ts   本地紀錄與設定
+public/          manifest、圖示、service worker；wasm/ 與 models/ 由 scripts/prepare-assets.mjs 產生
+```
+
+## 注意
+
+本 App 只提供動作引導與計次，不是醫療建議。若有不適請立即停止並諮詢專業人員。
