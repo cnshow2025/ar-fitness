@@ -11,6 +11,7 @@ import { speech } from '../speech';
 import type { SessionItemResult, SessionResult, Settings } from '../storage';
 import { el } from './dom';
 import { Overlay } from './overlay';
+import { CONTROL_HINT, drawHoldRing, HoldController } from '../control/gestures';
 
 export interface SessionHandlers {
   onFinish(result: SessionResult): void;
@@ -40,6 +41,9 @@ export function mountSession(root: HTMLElement, program: Program, settings: Sett
   const skipBtn = el('button', { class: 'btn secondary', onClick: () => skipItem() }, ['跳過此動作']);
   const endBtn = el('button', { class: 'btn danger', onClick: () => endSession() }, ['結束']);
   const panel = el('div', { class: 'panel' });
+  const holdLabel = el('span');
+  const holdFill = el('i');
+  const holdBar = el('div', { class: 'hold-bar', hidden: true }, [holdLabel, el('div', { class: 'track' }, [holdFill])]);
   const hudBottom = el('div', { class: 'hud-bottom' }, [
     cue,
     el('div', { class: 'metric-row' }, [metricText, dirText, el('span', { class: 'spacer' }), stateText]),
@@ -76,6 +80,8 @@ export function mountSession(root: HTMLElement, program: Program, settings: Sett
   let timerId = 0;
   let cueTimer = 0;
   let disposed = false;
+  const control = new HoldController();
+  let autoStartAt: number | null = null;
   const sessionStartedAt = Date.now();
   const results: SessionItemResult[] = [];
 
@@ -92,6 +98,15 @@ export function mountSession(root: HTMLElement, program: Program, settings: Sett
     if (holdMs > 0) cueTimer = window.setTimeout(() => {
       if (cue.textContent === text) cue.textContent = '';
     }, holdMs);
+  }
+
+  function updateHoldBar(): void {
+    const st = control.state;
+    if (st.gesture && st.progress > 0) {
+      holdBar.hidden = false;
+      holdLabel.textContent = st.gesture === 'raiseOne' ? '✋ 維持中…開始' : '✖ 維持中…跳過';
+      holdFill.style.width = `${Math.round(st.progress * 100)}%`;
+    } else holdBar.hidden = true;
   }
 
   function toggleVoice(): void {
@@ -151,6 +166,8 @@ export function mountSession(root: HTMLElement, program: Program, settings: Sett
         : `${targetReps()} 次`;
     const visibilityHint = el('p', { class: 'note' });
     const startBtn = el('button', { class: 'btn block', onClick: () => startCountdown() }, ['開始']);
+    autoStartAt = null;
+    control.reset();
     setPanel(
       el('div', {}, [
         el('div', { class: 'chip accent' }, [`第 ${itemIndex + 1} / ${program.items.length} 個動作`]),
@@ -160,6 +177,8 @@ export function mountSession(root: HTMLElement, program: Program, settings: Sett
         el('p', {}, [el('b', {}, [`目標：${target}`])]),
         visibilityHint,
         el('div', { class: 'actions' }, [startBtn, el('button', { class: 'btn secondary block', onClick: () => skipItem() }, ['跳過此動作'])]),
+        settings.gestureControl ? el('p', { class: 'note' }, [CONTROL_HINT]) : null,
+        holdBar,
       ]),
     );
     speech.speak(`下一個動作，${ex.name}。${ex.description}`, { interrupt: true });
@@ -169,7 +188,18 @@ export function mountSession(root: HTMLElement, program: Program, settings: Sett
       if (phase !== 'intro') return;
       if (!currentPose) visibilityHint.textContent = '尚未偵測到人，請站到相機前。';
       else if (!bodyVisible) visibilityHint.textContent = ex.fullBody ? '請退後一點，讓全身（含腳踝）入鏡。' : '請讓上半身（含手肘）入鏡。';
-      else visibilityHint.textContent = '✓ 已偵測到您，可以開始。';
+      else if (settings.autoStart) {
+        const now = performance.now();
+        if (autoStartAt === null) autoStartAt = now + 5000;
+        const left = Math.ceil((autoStartAt - now) / 1000);
+        if (left <= 0) {
+          startCountdown();
+          return;
+        }
+        visibilityHint.textContent = `✓ 已偵測到您，${left} 秒後自動開始（單手高舉可立即開始）。`;
+        startBtn.textContent = `開始（${left}）`;
+      } else visibilityHint.textContent = '✓ 已偵測到您，可以開始。';
+      if (!bodyVisible) autoStartAt = null;
     }, 300);
   }
 
@@ -279,8 +309,11 @@ export function mountSession(root: HTMLElement, program: Program, settings: Sett
         big,
         el('p', {}, ['下一個：', el('b', {}, [next.name])]),
         el('div', { class: 'actions' }, [el('button', { class: 'btn secondary block', onClick: () => showIntro() }, ['跳過休息'])]),
+        settings.gestureControl ? el('p', { class: 'note' }, ['✋ 單手高舉 1.5 秒＝跳過休息']) : null,
+        holdBar,
       ]),
     );
+    control.reset();
     speech.speak(`休息 ${sec} 秒`);
     window.clearInterval(timerId);
     timerId = window.setInterval(() => {
@@ -338,10 +371,29 @@ export function mountSession(root: HTMLElement, program: Program, settings: Sett
 
     if (!frame.pose) {
       bodyVisible = false;
+      control.update(null, now);
       overlay.clear();
       if (phase === 'active' && now - lastVisibleAt > 1000) showCue('沒有偵測到人，請站到相機前', 'danger', false, 0);
       return;
     }
+
+    // 控制手勢：說明頁＝開始／跳過，休息＝跳過休息，運動中＝雙手交叉跳過
+    if (settings.gestureControl && (phase === 'intro' || phase === 'rest' || phase === 'active')) {
+      const fired = control.update(frame.pose, now);
+      if (fired === 'raiseOne' && phase === 'intro') {
+        startCountdown();
+        return;
+      }
+      if (fired === 'raiseOne' && phase === 'rest') {
+        showIntro();
+        return;
+      }
+      if (fired === 'crossArms' && (phase === 'intro' || phase === 'active')) {
+        skipItem();
+        return;
+      }
+    } else control.update(null, now);
+    updateHoldBar();
     const needed = ex?.fullBody ? FULL_BODY_POINTS : UPPER_BODY_POINTS;
     bodyVisible = allVisible(frame.pose, needed, 0.45);
     if (bodyVisible) lastVisibleAt = now;
@@ -405,6 +457,7 @@ export function mountSession(root: HTMLElement, program: Program, settings: Sett
       progress,
       showAngles: settings.showAngles,
     });
+    drawHoldRing(canvas, control.state, camera.mirrored);
   }
 
   // ───── 啟動／清理 ─────

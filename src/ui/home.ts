@@ -206,6 +206,18 @@ function settingsTab(settings: Settings): HTMLElement {
   );
   wrap.append(
     toggleRow(
+      '手勢控制',
+      '單手高舉 1.5 秒＝開始／下一個；雙手胸前交叉 1.5 秒＝跳過，不用走到手機前',
+      () => settings.gestureControl,
+      (v) => (settings.gestureControl = v),
+    ),
+    toggleRow(
+      '自動開始',
+      '動作說明時偵測到您入鏡後，5 秒自動倒數開始',
+      () => settings.autoStart,
+      (v) => (settings.autoStart = v),
+    ),
+    toggleRow(
       '跳舞語音報格',
       '跳舞時提前一拍念出下一步（BPM 太快時自動關閉）',
       () => settings.danceVoice,

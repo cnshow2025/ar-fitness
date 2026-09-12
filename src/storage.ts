@@ -28,6 +28,10 @@ export interface Settings {
   danceOffsetMs: number;
   /** 跳舞時語音報格 */
   danceVoice: boolean;
+  /** 偵測到人入鏡後自動倒數開始 */
+  autoStart: boolean;
+  /** 單手高舉／雙手交叉的控制手勢 */
+  gestureControl: boolean;
 }
 
 export interface DanceRecord {
@@ -81,6 +85,8 @@ export function loadSettings(): Settings {
     showAngles: true,
     danceOffsetMs: 100,
     danceVoice: true,
+    autoStart: true,
+    gestureControl: true,
     ...read<Partial<Settings>>(SETTINGS_KEY, {}),
   };
 }

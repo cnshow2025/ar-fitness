@@ -639,3 +639,30 @@ table.summary td.num {
 .ready-panel p {
   line-height: 1.7;
 }
+
+/* 手勢維持進度 */
+.hold-bar {
+  width: 100%;
+  max-width: 360px;
+  margin-top: 12px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--good);
+}
+.hold-bar[hidden] {
+  display: none;
+}
+.hold-bar .track {
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.15);
+  overflow: hidden;
+  margin-top: 6px;
+}
+.hold-bar .track i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--good);
+  transition: width 0.08s linear;
+}

@@ -12,6 +12,7 @@ import { speech } from '../speech';
 import { saveDanceRecord, type DanceRecord, type Settings } from '../storage';
 import { DanceOverlay, FOOT_COLOR, FOOT_LABEL, type FlashDraw, type TargetDraw } from './danceOverlay';
 import { el } from './dom';
+import { CONTROL_HINT, drawHoldRing, HoldController } from '../control/gestures';
 
 export interface DanceHandlers {
   onExit(): void;
@@ -69,6 +70,9 @@ export function mountDance(root: HTMLElement, level: Level, settings: Settings, 
   const progressBar = el('div');
   const hint = el('div', { class: 'cue' });
   const panel = el('div', { class: 'panel' });
+  const holdLabel = el('span');
+  const holdFill = el('i');
+  const holdBar = el('div', { class: 'hold-bar', hidden: true }, [holdLabel, el('div', { class: 'track' }, [holdFill])]);
   const flipBtn = el('button', { class: 'icon-btn', 'aria-label': '切換鏡頭', onClick: () => void flipCamera() }, ['🔄']);
   const wrap = el('div', { class: 'session dance' }, [
     video,
@@ -109,6 +113,9 @@ export function mountDance(root: HTMLElement, level: Level, settings: Settings, 
   const announced = new Set<number>();
   let lastBeatInt = -1;
   let currentPose: Pose | null = null;
+  const control = new HoldController();
+  let readyTimer = 0;
+  let resultNext: (() => void) | null = null;
 
   const msPerBeat = 60000 / level.bpm;
   const songTime = (perfT: number) => perfT - perfStart - settings.danceOffsetMs;
@@ -180,17 +187,37 @@ export function mountDance(root: HTMLElement, level: Level, settings: Settings, 
   function showReady(): void {
     phase = 'ready';
     hint.textContent = '';
+    control.reset();
+    const startBtn = el('button', { class: 'btn block', onClick: () => void startCountdown() }, ['開始跳舞']);
+    const autoNote = el('p', { class: 'note' }, [settings.gestureControl ? CONTROL_HINT : '']);
+    if (settings.autoStart) {
+      let left = 5;
+      startBtn.textContent = `開始跳舞（${left}）`;
+      window.clearInterval(readyTimer);
+      readyTimer = window.setInterval(() => {
+        if (phase !== 'ready') return;
+        left -= 1;
+        if (left <= 0) {
+          window.clearInterval(readyTimer);
+          void startCountdown();
+          return;
+        }
+        startBtn.textContent = `開始跳舞（${left}）`;
+      }, 1000);
+    }
     setPanel(
       el('div', { class: 'ready-panel' }, [
         el('h2', {}, ['九宮格已就位']),
         el('p', {}, ['亮起的格子就是要踩的位置。', el('br'), el('b', { style: `color:${FOOT_COLOR.L}` }, ['藍色 = 左腳']), '　', el('b', { style: `color:${FOOT_COLOR.R}` }, ['橘色 = 右腳']), '　', el('b', { style: `color:${FOOT_COLOR.both}` }, ['綠色 = 雙腳跳']), el('br'), '外框縮到貼齊格子的那一刻踩下去最準。', el('br'), '看到 🙌 👏 ↔️ 就做出對應手勢。']),
         el('div', { class: 'actions' }, [
-          el('button', { class: 'btn block', onClick: () => void startCountdown() }, ['開始跳舞']),
+          startBtn,
           el('button', { class: 'btn secondary block', onClick: () => startCalibrate() }, ['重新校正']),
         ]),
+        autoNote,
+        holdBar,
       ]),
     );
-    speech.speak('校正完成，準備好就按開始');
+    speech.speak(settings.autoStart ? '校正完成，5 秒後開始' : '校正完成，準備好就按開始');
   }
 
   // ───── 倒數與遊玩 ─────
@@ -201,6 +228,7 @@ export function mountDance(root: HTMLElement, level: Level, settings: Settings, 
       /* 沒有音效也能玩 */
     }
     speech.unlock();
+    window.clearInterval(readyTimer);
     phase = 'countdown';
     game = new DanceGame(notes, level.bpm);
     announced.clear();
@@ -316,6 +344,8 @@ export function mountDance(root: HTMLElement, level: Level, settings: Settings, 
     const isBest = saveDanceRecord(rec);
     const next = LEVEL_BY_ID[level.id + 1];
     const stars = '★'.repeat(game.stars) + '☆'.repeat(3 - game.stars);
+    control.reset();
+    resultNext = next && game.stars >= 1 ? () => handlers.onPlay(next) : () => handlers.onPlay(level);
     setPanel(
       el('div', {}, [
         el('h2', {}, [game.stars === 3 ? '太棒了！' : game.stars >= 1 ? '完成！' : '再試一次'] ),
@@ -331,6 +361,8 @@ export function mountDance(root: HTMLElement, level: Level, settings: Settings, 
           el('button', { class: `btn block ${next && game.stars >= 1 ? 'secondary' : ''}`, onClick: () => handlers.onPlay(level) }, ['再玩一次']),
           el('button', { class: 'btn secondary block', onClick: () => exit() }, ['回關卡列表']),
         ]),
+        settings.gestureControl ? el('p', { class: 'note' }, [next && game.stars >= 1 ? '✋ 單手高舉＝下一關　✖ 雙手交叉＝回列表' : '✋ 單手高舉＝再玩一次　✖ 雙手交叉＝回列表']) : null,
+        holdBar,
       ]),
     );
     speech.speak(game.stars === 3 ? '太棒了，三顆星！' : game.stars >= 1 ? `完成，${game.stars} 顆星` : '再試一次', { interrupt: true });
@@ -351,7 +383,26 @@ export function mountDance(root: HTMLElement, level: Level, settings: Settings, 
       updateCountdown(now);
       if (frame.pose && grid) feet.update(frame.pose, grid, now);
     } else if (phase === 'playing') playFrame(frame.pose, now);
-    else if ((phase === 'ready' || phase === 'result') && frame.pose && grid) feet.update(frame.pose, grid, now);
+    else if (phase === 'ready' || phase === 'result') {
+      if (frame.pose && grid) feet.update(frame.pose, grid, now);
+      // 控制手勢：就位頁＝開始／回列表，結果頁＝下一關（或再玩）／回列表
+      const fired = settings.gestureControl ? control.update(frame.pose, now) : null;
+      if (fired === 'raiseOne') {
+        if (phase === 'ready') void startCountdown();
+        else resultNext?.();
+        return;
+      }
+      if (fired === 'crossArms') {
+        exit();
+        return;
+      }
+      const st = control.state;
+      if (st.gesture && st.progress > 0) {
+        holdBar.hidden = false;
+        holdLabel.textContent = st.gesture === 'raiseOne' ? (phase === 'ready' ? '✋ 維持中…開始' : '✋ 維持中…下一步') : '✖ 維持中…回列表';
+        holdFill.style.width = `${Math.round(st.progress * 100)}%`;
+      } else holdBar.hidden = true;
+    }
 
     // 目標與閃光
     const targets: TargetDraw[] = [];
@@ -375,6 +426,7 @@ export function mountDance(root: HTMLElement, level: Level, settings: Settings, 
       flashes,
       showLabels: phase !== 'playing',
     });
+    if (phase === 'ready' || phase === 'result') drawHoldRing(canvas, control.state, camera.mirrored);
   }
 
   function previewGridFrom(pose: Pose): FloorGrid | null {
@@ -421,6 +473,7 @@ export function mountDance(root: HTMLElement, level: Level, settings: Settings, 
     disposed = true;
     cancelAnimationFrame(rafId);
     window.clearTimeout(timerId);
+    window.clearInterval(readyTimer);
     speech.stop();
     audio.close();
     camera.stop();
