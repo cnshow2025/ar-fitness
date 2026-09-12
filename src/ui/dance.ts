@@ -50,7 +50,15 @@ export function mountDance(root: HTMLElement, level: Level, settings: Settings, 
   const beatLights = Array.from({ length: 4 }, () => el('span', { class: 'beat-light' }));
   const previewCells = Array.from({ length: 9 }, () => el('div', { class: 'pv-cell' }));
   const previewGesture = el('div', { class: 'pv-gesture' });
-  const preview = el('div', { class: 'preview-grid', hidden: true }, [previewGesture, el('div', { class: 'pv-grid' }, previewCells)]);
+  // 平面預告格用「俯視、玩家面向手機」的方向：上排＝靠近手機（前）、下排＝遠離手機（後）。
+  // 資料的 row 0 是後排，所以顯示時上下翻轉。
+  const previewOrder = [6, 7, 8, 3, 4, 5, 0, 1, 2].map((i) => previewCells[i]);
+  const preview = el('div', { class: 'preview-grid', hidden: true }, [
+    previewGesture,
+    el('div', { class: 'pv-marker' }, ['📱 手機這邊（前）']),
+    el('div', { class: 'pv-grid' }, previewOrder),
+    el('div', { class: 'pv-marker' }, ['後']),
+  ]);
   const lane = el('div', { class: 'dance-lane' });
   const gestureBanner = el('div', { class: 'gesture-banner', hidden: true });
   const judgePop = el('div', { class: 'judge-pop' });
