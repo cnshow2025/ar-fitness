@@ -17,8 +17,12 @@ export interface GridCalibration {
 
 const ROW_OFFSETS = [-1.6, -0.5, 0.6, 1.9] as const;
 
-/** 從一幀姿勢推算校正參數：需要髖與腳踝可見。 */
-export function calibrateFromPose(pose: Pose): GridCalibration | null {
+/** 預設格寬／格高相對腿長的比例（一步約 0.45 倍腿長，不用跨太大步）。 */
+export const CELL_W_RATIO = 0.45;
+export const CELL_H_RATIO = 0.26;
+
+/** 從一幀姿勢推算校正參數：需要髖與腳踝可見。scale 可放大縮小格子（1 = 預設）。 */
+export function calibrateFromPose(pose: Pose, scale = 1): GridCalibration | null {
   const ids = [LM.LEFT_HIP, LM.RIGHT_HIP, LM.LEFT_ANKLE, LM.RIGHT_ANKLE];
   if (visibilityOf(pose, ids) < 0.5) return null;
   const la = pose[LM.LEFT_ANKLE];
@@ -30,8 +34,8 @@ export function calibrateFromPose(pose: Pose): GridCalibration | null {
   return {
     cx: (la.x + ra.x) / 2,
     cy: (la.y + ra.y) / 2,
-    w: legLen * 0.62,
-    h: legLen * 0.34,
+    w: legLen * CELL_W_RATIO * scale,
+    h: legLen * CELL_H_RATIO * scale,
     k: 0.12,
   };
 }
@@ -80,6 +84,25 @@ export class FloorGrid {
     if (u < -2.0 * w || u > 2.0 * w) return null;
     const col = Math.min(2, Math.max(0, Math.floor(u / w + 1.5)));
     return cellIndex(row, col);
+  }
+
+  /**
+   * 連續的格子座標：colCont 0..3（1.5 = 中欄中心）、rowCont 0..3（1.5 = 中排中心），
+   * 超出範圍會被夾在 -0.5..3.5，用來把腳畫在俯視跳舞墊上。
+   */
+  continuous(p: { x: number; y: number }): { colCont: number; rowCont: number } {
+    const rb = this.rowBounds();
+    let rowCont: number;
+    if (p.y < rb[0]) rowCont = (p.y - rb[0]) / (rb[1] - rb[0]);
+    else if (p.y >= rb[3]) rowCont = 3 + (p.y - rb[3]) / (rb[3] - rb[2]);
+    else {
+      const i = p.y < rb[1] ? 0 : p.y < rb[2] ? 1 : 2;
+      rowCont = i + (p.y - rb[i]) / (rb[i + 1] - rb[i]);
+    }
+    const u = (this.cal.cx - p.x) / this.scaleAt(p.y);
+    const colCont = u / this.cal.w + 1.5;
+    const clamp = (v: number) => Math.min(3.5, Math.max(-0.5, v));
+    return { colCont: clamp(colCont), rowCont: clamp(rowCont) };
   }
 
   /** 格子的四個角（影像座標），用來畫在地板上。 */

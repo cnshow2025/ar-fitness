@@ -163,7 +163,7 @@ export function mountDance(root: HTMLElement, level: Level, settings: Settings, 
       calStableSince = 0;
       return;
     }
-    const cal = calibrateFromPose(pose);
+    const cal = calibrateFromPose(pose, settings.danceCellScale);
     if (!cal) return;
     const mid = { x: cal.cx, y: cal.cy };
     const moved = calAnchor ? Math.hypot(mid.x - calAnchor.x, mid.y - calAnchor.y) : Infinity;
@@ -205,7 +205,7 @@ export function mountDance(root: HTMLElement, level: Level, settings: Settings, 
     setPanel(
       el('div', { class: 'ready-panel' }, [
         el('h2', {}, ['九宮格已就位']),
-        el('p', {}, ['亮起的格子就是要踩的位置。', el('br'), el('b', { style: `color:${FOOT_COLOR.L}` }, ['藍色 = 左腳']), '　', el('b', { style: `color:${FOOT_COLOR.R}` }, ['橘色 = 右腳']), '　', el('b', { style: `color:${FOOT_COLOR.both}` }, ['綠色 = 雙腳跳']), el('br'), '外框縮到貼齊格子的那一刻踩下去最準。', el('br'), '看到 🙌 👏 ↔️ 就做出對應手勢。']),
+        el('p', {}, [settings.danceFloorMode === 'pad' ? '腳邊的跳舞墊：上排＝靠近手機、下排＝遠離手機，亮起的格子就是要踩的位置。' : '亮起的格子就是要踩的位置。', el('br'), el('b', { style: `color:${FOOT_COLOR.L}` }, ['藍色 = 左腳']), '　', el('b', { style: `color:${FOOT_COLOR.R}` }, ['橘色 = 右腳']), '　', el('b', { style: `color:${FOOT_COLOR.both}` }, ['綠色 = 雙腳跳']), el('br'), '外框縮到貼齊格子的那一刻踩下去最準。', el('br'), '看到 🙌 👏 ↔️ 就做出對應手勢。']),
         el('div', { class: 'actions' }, [
           startBtn,
           el('button', { class: 'btn secondary block', onClick: () => startCalibrate() }, ['重新校正']),
@@ -455,13 +455,14 @@ export function mountDance(root: HTMLElement, level: Level, settings: Settings, 
       flashes,
       showLabels: phase !== 'playing',
       beatPulse,
+      mode: settings.danceFloorMode,
     });
     if (phase === 'ready' || phase === 'result') drawHoldRing(canvas, control.state, camera.mirrored);
   }
 
   function previewGridFrom(pose: Pose): FloorGrid | null {
     if (calSamples.length) return new FloorGrid(averageCalibrations(calSamples.slice(-10)));
-    const cal = calibrateFromPose(pose);
+    const cal = calibrateFromPose(pose, settings.danceCellScale);
     return cal ? new FloorGrid(cal) : null;
   }
 

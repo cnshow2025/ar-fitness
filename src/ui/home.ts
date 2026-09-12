@@ -224,6 +224,30 @@ function settingsTab(settings: Settings): HTMLElement {
       (v) => (settings.danceCallout = v),
     ),
   );
+  wrap.append(
+    toggleRow(
+      '跳舞地板格用俯視方向',
+      '開：畫在腳邊的跳舞墊，上排＝靠近手機、下排＝遠離手機（與上方預告格一致）。關：貼合地面的透視格',
+      () => settings.danceFloorMode === 'pad',
+      (v) => (settings.danceFloorMode = v ? 'pad' : 'ar'),
+    ),
+  );
+  const cellVal = el('b', {}, [`${Math.round(settings.danceCellScale * 100)}%`]);
+  const stepCell = (d: number) => {
+    settings.danceCellScale = Math.round(Math.max(0.6, Math.min(1.6, settings.danceCellScale + d)) * 10) / 10;
+    cellVal.textContent = `${Math.round(settings.danceCellScale * 100)}%`;
+    saveSettings(settings);
+  };
+  wrap.append(
+    el('div', { class: 'setting' }, [
+      el('div', {}, [el('div', {}, ['跳舞格子大小']), el('div', { class: 'note' }, ['腳要移動多遠才算換格。覺得要跨太大步就調小'])]),
+      el('div', { class: 'row' }, [
+        el('button', { class: 'btn secondary small', onClick: () => stepCell(-0.1) }, ['−']),
+        cellVal,
+        el('button', { class: 'btn secondary small', onClick: () => stepCell(0.1) }, ['+']),
+      ]),
+    ]),
+  );
   const offsetVal = el('b', {}, [`${settings.danceOffsetMs} ms`]);
   const step = (d: number) => {
     settings.danceOffsetMs = Math.max(-200, Math.min(400, settings.danceOffsetMs + d));

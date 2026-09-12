@@ -21,6 +21,14 @@ describe('FloorGrid', () => {
   it('每一格的中心都會被歸到自己', () => {
     for (let c = 0; c < 9; c++) expect(grid.cellOf(grid.center(c))).toBe(c);
   });
+  it('連續座標：中央是 (1.5, 1.5)，往前排是 rowCont 變大', () => {
+    const c = grid.continuous({ x: 500, y: 600 });
+    expect(c.colCont).toBeCloseTo(1.5, 1);
+    expect(c.rowCont).toBeCloseTo(1.5, 1);
+    expect(grid.continuous(grid.center(7)).rowCont).toBeGreaterThan(2);
+    expect(grid.continuous(grid.center(1)).rowCont).toBeLessThan(1);
+    expect(grid.continuous(grid.center(3)).colCont).toBeLessThan(1);
+  });
   it('離得太遠回傳 null', () => {
     expect(grid.cellOf({ x: 500, y: 100 })).toBeNull();
     expect(grid.cellOf({ x: 900, y: 600 })).toBeNull();

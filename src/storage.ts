@@ -32,6 +32,10 @@ export interface Settings {
   autoStart: boolean;
   /** 單手高舉／雙手交叉的控制手勢 */
   gestureControl: boolean;
+  /** 跳舞地板格顯示：pad＝俯視跳舞墊（上＝手機），ar＝貼地透視 */
+  danceFloorMode: 'pad' | 'ar';
+  /** 跳舞格子大小倍率（1 = 預設） */
+  danceCellScale: number;
 }
 
 export interface DanceRecord {
@@ -87,6 +91,8 @@ export function loadSettings(): Settings {
     danceCallout: false,
     autoStart: true,
     gestureControl: true,
+    danceFloorMode: 'pad',
+    danceCellScale: 1,
     ...read<Partial<Settings>>(SETTINGS_KEY, {}),
   };
 }
