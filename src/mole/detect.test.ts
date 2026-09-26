@@ -52,3 +52,17 @@ describe('HandTracker', () => {
     expect(tr.update(poseWith([300, 600]), layout, 66).map((e) => e.hole)).toContain(7);
   });
 });
+
+describe('HandTracker 去抖', () => {
+  it('手靜止時小幅雜訊不會讓圓圈亂跳', () => {
+    const tr = new HandTracker();
+    const xs: number[] = [];
+    for (let i = 0; i < 30; i++) {
+      const noise = (i % 2 === 0 ? 1 : -1) * 6; // ±6px 抖動
+      tr.update(poseWith([300 + noise, 300]), layout, i * 33);
+      if (i > 10) xs.push(tr.pos.R!.x);
+    }
+    const spread = Math.max(...xs) - Math.min(...xs);
+    expect(spread).toBeLessThan(4);
+  });
+});
