@@ -32,6 +32,7 @@ export function mountMole(root: HTMLElement, difficulty: MoleDifficulty, setting
   const scoreEl = el('div', { class: 'counter' }, ['0']);
   const comboEl = el('div', { class: 'combo' });
   const timeEl = el('span', { class: 'chip warn' }, ['60 秒']);
+  const fpsEl = el('span', { class: 'fps' }, ['']);
   const hint = el('div', { class: 'cue' });
   const progressBar = el('div');
   const panel = el('div', { class: 'panel' });
@@ -44,7 +45,7 @@ export function mountMole(root: HTMLElement, difficulty: MoleDifficulty, setting
     canvas,
     el('div', { class: 'hud-top' }, [
       el('button', { class: 'icon-btn', 'aria-label': '返回', onClick: () => exit() }, ['✕']),
-      el('div', { class: 'title' }, [el('b', {}, [`打地鼠 · ${difficulty.name}`]), timeEl]),
+      el('div', { class: 'title' }, [el('b', {}, [`打地鼠 · ${difficulty.name}`]), timeEl, ' ', fpsEl]),
       el('div', {}, [scoreEl, comboEl]),
       flipBtn,
     ]),
@@ -70,6 +71,8 @@ export function mountMole(root: HTMLElement, difficulty: MoleDifficulty, setting
   let placeAnchor: { x: number; y: number } | null = null;
   let placeSince = 0;
   let lastTickSec = -1;
+  let fpsFrames = 0;
+  let fpsSince = 0;
   const fx: MoleFx[] = [];
 
   function setPanel(content: HTMLElement | null): void {
@@ -209,6 +212,7 @@ export function mountMole(root: HTMLElement, difficulty: MoleDifficulty, setting
   }
 
   function playFrame(pose: Pose | null, now: number): void {
+    // pose 這裡傳進來的是未平滑的原始座標（見 loop）
     const t = now - startAt;
     for (const ev of game.update(t)) {
       if (ev.type === 'spawn') sfx.pop();
@@ -288,10 +292,20 @@ export function mountMole(root: HTMLElement, difficulty: MoleDifficulty, setting
     const frame = detector.detect(video, now);
     overlay.resize(frame.width, frame.height);
 
+    // fps 統計（每 0.5 秒更新一次）
+    fpsFrames += 1;
+    if (now - fpsSince >= 500) {
+      const fps = (fpsFrames * 1000) / (now - fpsSince);
+      fpsEl.textContent = `${fps.toFixed(0)} fps · ${detector.delegate ?? '?'} · ${detector.lastInferenceMs.toFixed(0)} ms`;
+      fpsFrames = 0;
+      fpsSince = now;
+    }
+    const hp = frame.rawPose; // 手用未平滑座標，反應快
+
     if (phase === 'place') placeFrame(frame.pose, now);
-    else if (phase === 'playing') playFrame(frame.pose, now);
+    else if (phase === 'playing') playFrame(hp, now);
     else if (phase === 'ready' || phase === 'result') {
-      if (frame.pose && layout) hands.update(frame.pose, layout, now);
+      if (hp && layout) hands.update(hp, layout, now);
       const fired = settings.gestureControl ? control.update(frame.pose, now) : null;
       if (fired === 'raiseOne') {
         if (phase === 'ready') void startCountdown();
@@ -308,7 +322,7 @@ export function mountMole(root: HTMLElement, difficulty: MoleDifficulty, setting
         holdLabel.textContent = st.gesture === 'raiseOne' ? (phase === 'ready' ? '✋ 維持中…開始' : '✋ 維持中…再玩一次') : '✖ 維持中…回列表';
         holdFill.style.width = `${Math.round(st.progress * 100)}%`;
       } else holdBar.hidden = true;
-    } else if (phase === 'countdown' && frame.pose && layout) hands.update(frame.pose, layout, now);
+    } else if (phase === 'countdown' && hp && layout) hands.update(hp, layout, now);
 
     for (let i = fx.length - 1; i >= 0; i--) {
       fx[i].alpha = Math.max(0, (fx[i].until - now) / 600);
