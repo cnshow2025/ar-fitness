@@ -5,6 +5,8 @@ import { renderHome } from './ui/home';
 import { mountSession } from './ui/session';
 import { mountDance } from './ui/dance';
 import type { Level } from './dance/types';
+import { mountMole } from './ui/mole';
+import type { MoleDifficulty } from './mole/game';
 import { renderSummary } from './ui/summary';
 
 const root = document.getElementById('app')!;
@@ -15,7 +17,15 @@ function goHome(): void {
   teardown?.();
   teardown = null;
   window.scrollTo(0, 0);
-  renderHome(root, settings, { onStart: startProgram, onDance: startDance });
+  renderHome(root, settings, { onStart: startProgram, onDance: startDance, onMole: startMole });
+}
+
+function startMole(difficulty: MoleDifficulty): void {
+  teardown?.();
+  teardown = mountMole(root, difficulty, settings, {
+    onExit: goHome,
+    onPlay: (d) => startMole(d),
+  });
 }
 
 function startDance(level: Level): void {

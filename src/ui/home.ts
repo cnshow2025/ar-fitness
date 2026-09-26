@@ -1,15 +1,17 @@
 import { CATEGORY_LABEL, EXERCISES } from '../exercises/definitions';
 import { estimateDuration, PROGRAMS, singleExerciseProgram, type Program } from '../programs/definitions';
-import { clearHistory, loadDanceRecords, loadHistory, saveSettings, type Settings } from '../storage';
+import { clearHistory, loadDanceRecords, loadHistory, loadMoleRecords, saveSettings, type Settings } from '../storage';
+import { DIFFICULTIES, type MoleDifficulty } from '../mole/game';
 import { LEVELS } from '../dance/chart';
 import type { Level } from '../dance/types';
 import { el, formatDuration } from './dom';
 
-type Tab = 'programs' | 'exercises' | 'dance' | 'history' | 'settings';
+type Tab = 'programs' | 'exercises' | 'dance' | 'mole' | 'history' | 'settings';
 
 export interface HomeHandlers {
   onStart(program: Program): void;
   onDance(level: Level): void;
+  onMole(difficulty: MoleDifficulty): void;
 }
 
 let currentTab: Tab = 'programs';
@@ -29,6 +31,7 @@ export function renderHome(root: HTMLElement, settings: Settings, handlers: Home
     ['programs', '課程'],
     ['exercises', '單項動作'],
     ['dance', '跳舞'],
+    ['mole', '打地鼠'],
     ['history', '紀錄'],
     ['settings', '設定'],
   ];
@@ -40,6 +43,7 @@ export function renderHome(root: HTMLElement, settings: Settings, handlers: Home
     if (tab === 'programs') content.append(programsTab(handlers));
     if (tab === 'exercises') content.append(exercisesTab(handlers));
     if (tab === 'dance') content.append(danceTab(handlers));
+    if (tab === 'mole') content.append(moleTab(handlers));
     if (tab === 'history') content.append(historyTab(() => renderTab('history')));
     if (tab === 'settings') content.append(settingsTab(settings));
   };
@@ -125,6 +129,30 @@ function danceTab(handlers: HomeHandlers): HTMLElement {
         ]),
         el('div', { class: 'meta' }, [
           rec ? el('span', { class: 'chip accent' }, [`最高 ${rec.score} 分 · ${Math.round(rec.accuracy * 100)}%`]) : el('span', { class: 'chip' }, ['尚未挑戰']),
+          rec ? el('span', { class: 'chip' }, [`最高連擊 ${rec.maxCombo}`]) : null,
+        ]),
+      ]),
+    );
+  }
+  return wrap;
+}
+
+function moleTab(handlers: HomeHandlers): HTMLElement {
+  const wrap = el('div');
+  const records = loadMoleRecords();
+  wrap.append(
+    el('p', { class: 'note' }, [
+      '打地鼠：畫面上有 3×4 共 12 個洞，地鼠冒出來就用手揮過去打它。金色 +3，炸彈不要打。60 秒內盡量多打。只需上半身入鏡，站著或坐著都可以。',
+    ]),
+  );
+  for (const d of DIFFICULTIES) {
+    const rec = records[d.id];
+    wrap.append(
+      el('button', { class: 'card', onClick: () => handlers.onMole(d) }, [
+        el('h3', {}, [`${d.name}速`, el('span', { class: `chip ${d.id === 'easy' ? 'accent' : d.id === 'hard' ? 'warn' : ''}` }, ['60 秒'])]),
+        el('p', {}, [d.description]),
+        el('div', { class: 'meta' }, [
+          rec ? el('span', { class: 'chip accent' }, [`最高 ${rec.score} 分 · 命中 ${Math.round(rec.accuracy * 100)}%`]) : el('span', { class: 'chip' }, ['尚未挑戰']),
           rec ? el('span', { class: 'chip' }, [`最高連擊 ${rec.maxCombo}`]) : null,
         ]),
       ]),

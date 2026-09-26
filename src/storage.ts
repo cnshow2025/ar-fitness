@@ -20,6 +20,16 @@ export interface SessionResult {
   items: SessionItemResult[];
 }
 
+export interface MoleRecord {
+  difficulty: string;
+  score: number;
+  hits: number;
+  misses: number;
+  accuracy: number;
+  maxCombo: number;
+  date: string;
+}
+
 export interface Settings {
   voice: boolean;
   facing: 'user' | 'environment';
@@ -53,6 +63,7 @@ const HISTORY_KEY = 'arfit.history.v1';
 const SETTINGS_KEY = 'arfit.settings.v1';
 const DANCE_KEY = 'arfit.dance.v1';
 const DANCE_CALIB_KEY = 'arfit.dance.calib.v1';
+const MOLE_KEY = 'arfit.mole.v1';
 
 function read<T>(key: string, fallback: T): T {
   try {
@@ -133,4 +144,18 @@ export function clearDanceCalibration(): void {
   } catch {
     /* ignore */
   }
+}
+
+export function loadMoleRecords(): Record<string, MoleRecord> {
+  return read<Record<string, MoleRecord>>(MOLE_KEY, {});
+}
+
+/** 只保留每個難度的最高分。回傳是否刷新紀錄。 */
+export function saveMoleRecord(rec: MoleRecord): boolean {
+  const all = loadMoleRecords();
+  const prev = all[rec.difficulty];
+  if (prev && prev.score >= rec.score) return false;
+  all[rec.difficulty] = rec;
+  write(MOLE_KEY, all);
+  return true;
 }

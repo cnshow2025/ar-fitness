@@ -79,7 +79,7 @@ button {
   border-radius: 999px;
   color: var(--muted);
   font-weight: 600;
-  font-size: 14px;
+  font-size: 13px;
   white-space: nowrap;
 }
 .tabs button.active {
@@ -465,7 +465,8 @@ table.summary td.num {
 }
 
 /* ───────── 跳舞九宮格 ───────── */
-.dance .combo {
+.dance .combo,
+.mole .combo {
   font-size: 13px;
   color: var(--warn);
   text-align: right;
