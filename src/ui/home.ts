@@ -142,7 +142,7 @@ function moleTab(handlers: HomeHandlers): HTMLElement {
   const records = loadMoleRecords();
   wrap.append(
     el('p', { class: 'note' }, [
-      '打地鼠：畫面上有 3×4 共 12 個洞，地鼠冒出來就用手揮過去打它。金色 +3，炸彈不要打。60 秒內盡量多打。只需上半身入鏡，站著或坐著都可以。',
+      '打地鼠：畫面上有 3×3 共 9 個洞，地鼠冒出來就用手揮過去打它。金色 +3，炸彈不要打。60 秒內盡量多打。只需上半身入鏡，站著或坐著都可以。',
     ]),
   );
   for (const d of DIFFICULTIES) {

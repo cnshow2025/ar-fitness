@@ -32,9 +32,9 @@ export const DIFFICULTIES: MoleDifficulty[] = [
 
 export const DIFFICULTY_BY_ID: Record<string, MoleDifficulty> = Object.fromEntries(DIFFICULTIES.map((d) => [d.id, d]));
 
-export const HOLE_COUNT = 12;
+export const HOLE_COUNT = 9;
 export const HOLE_COLS = 3;
-export const HOLE_ROWS = 4;
+export const HOLE_ROWS = 3;
 export const GAME_DURATION_MS = 60000;
 
 export type MoleEvent =

@@ -11,7 +11,7 @@ export interface HoleLayout {
 }
 
 /**
- * 依身體尺寸把 3×4 的洞排在雙手搆得到的範圍：
+ * 依身體尺寸把 3×3 的洞排在雙手搆得到的範圍（洞大、間距大）：
  * 橫向以肩膀中心為準、寬度約兩隻手臂長加肩寬；縱向從頭頂上方到腰。
  */
 export function layoutFromPose(pose: Pose, width: number, height: number): HoleLayout | null {
@@ -27,8 +27,8 @@ export function layoutFromPose(pose: Pose, width: number, height: number): HoleL
   if (arm < 20 || sw < 10) return null;
   const cx = (ls.x + rs.x) / 2;
   const sy = (ls.y + rs.y) / 2;
-  const gridW = Math.min(width * 0.96, 2.0 * arm + sw);
-  const gridH = Math.min(height * 0.85, 1.8 * arm);
+  const gridW = Math.min(width * 0.98, 2.3 * arm + sw);
+  const gridH = Math.min(height * 0.85, 2.0 * arm);
   const left = Math.min(width - gridW, Math.max(0, cx - gridW / 2));
   const top = Math.min(height - gridH, Math.max(0, sy - 0.9 * arm));
   const cellW = gridW / HOLE_COLS;
@@ -39,7 +39,7 @@ export function layoutFromPose(pose: Pose, width: number, height: number): HoleL
     const row = Math.floor(i / HOLE_COLS);
     centers.push({ x: left + (col + 0.5) * cellW, y: top + (row + 0.5) * cellH });
   }
-  return { centers, radius: Math.min(cellW * 0.4, cellH * 0.46), cellW, cellH };
+  return { centers, radius: Math.min(cellW * 0.4, cellH * 0.42), cellW, cellH };
 }
 
 /** 平均多幀排版讓洞的位置穩定。 */
@@ -57,7 +57,7 @@ export function averageLayouts(list: HoleLayout[]): HoleLayout {
   };
 }
 
-/** 某個點落在哪個洞（在半徑的 1.15 倍內），沒有回傳 null。 */
+/** 某個點落在哪個洞（在半徑的 1.4 倍內，手的感應範圍比洞大一點），沒有回傳 null。 */
 export function holeAt(layout: HoleLayout, p: { x: number; y: number }): number | null {
   let best = -1;
   let bestD = Infinity;
@@ -68,5 +68,5 @@ export function holeAt(layout: HoleLayout, p: { x: number; y: number }): number 
       best = i;
     }
   });
-  return bestD <= layout.radius * 1.15 ? best : null;
+  return bestD <= layout.radius * 1.4 ? best : null;
 }

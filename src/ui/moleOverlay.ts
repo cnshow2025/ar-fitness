@@ -118,16 +118,16 @@ export class MoleOverlay {
       ctx.fillStyle = HAND_COLOR[hand];
       ctx.globalAlpha = 0.85;
       ctx.beginPath();
-      ctx.arc(mx(p.x), p.y, r * 0.45, 0, Math.PI * 2);
+      ctx.arc(mx(p.x), p.y, r * 0.6, 0, Math.PI * 2);
       ctx.fill();
       ctx.globalAlpha = 1;
       ctx.strokeStyle = '#fff';
       ctx.lineWidth = 3 * scale;
       ctx.stroke();
       ctx.fillStyle = '#0b1020';
-      ctx.font = `bold ${r * 0.4}px system-ui, sans-serif`;
+      ctx.font = `bold ${r * 0.5}px system-ui, sans-serif`;
       ctx.textAlign = 'center';
-      ctx.fillText(hand, mx(p.x), p.y + r * 0.14);
+      ctx.fillText(hand, mx(p.x), p.y + r * 0.18);
     }
   }
 }

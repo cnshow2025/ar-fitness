@@ -13,9 +13,9 @@ pose[LM.LEFT_WRIST] = pt(480, 640);
 pose[LM.RIGHT_WRIST] = pt(240, 640);
 
 describe('layoutFromPose', () => {
-  it('排出 12 個洞，全部在畫面內，並以肩膀為中心', () => {
+  it('排出 9 個洞，全部在畫面內，並以肩膀為中心', () => {
     const l = layoutFromPose(pose, 720, 1280)!;
-    expect(l.centers).toHaveLength(12);
+    expect(l.centers).toHaveLength(9);
     for (const c of l.centers) {
       expect(c.x).toBeGreaterThan(0);
       expect(c.x).toBeLessThan(720);
@@ -28,7 +28,7 @@ describe('layoutFromPose', () => {
   it('holeAt 找到最近的洞，離太遠回傳 null', () => {
     const l = layoutFromPose(pose, 720, 1280)!;
     expect(holeAt(l, l.centers[5])).toBe(5);
-    expect(holeAt(l, { x: l.centers[5].x + l.radius * 0.5, y: l.centers[5].y })).toBe(5);
+    expect(holeAt(l, { x: l.centers[5].x + l.radius * 1.2, y: l.centers[5].y })).toBe(5);
     expect(holeAt(l, { x: 5, y: 5 })).toBeNull();
   });
 });
